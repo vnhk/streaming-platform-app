@@ -1,11 +1,11 @@
 package com.bervan.canvasapp.view;
 
+import com.bervan.canvasapp.VideoManager;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
-import com.bervan.canvasapp.VideoManager;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Image;
-import com.vaadin.flow.component.html.Label;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
@@ -60,10 +60,8 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
                 image.getStyle().set("object-fit", "cover");
 
                 // Add title/description
-                Label title = new Label(directory.getFilename());
+                H3 title = new H3(directory.getFilename());
                 title.getStyle()
-                        .set("font-size", "16px")
-                        .set("font-weight", "bold")
                         .set("text-align", "center")
                         .set("margin-top", "10px");
 
