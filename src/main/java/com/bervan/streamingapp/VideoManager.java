@@ -24,9 +24,16 @@ public class VideoManager {
         this.fileServiceManager = fileServiceManager;
     }
 
-    public List<Metadata> loadVideosDirectories() {
+    public List<Metadata> loadVideosMainDirectories() {
         return fileServiceManager.loadByPathStartsWith(appFolder.substring(1))
-                .stream().filter(Metadata::isDirectory).toList(); //replace first / or \
+                .stream().filter(Metadata::isDirectory)
+                .filter(e -> e.getPath().equals(appFolder.substring(1)))
+                .toList(); //replace first / or \
+    }
+
+    public List<Metadata> loadVideos() {
+        return fileServiceManager.loadByPathStartsWith(appFolder.substring(1)).stream()
+                .filter(e -> supportedExtensions.contains(e.getExtension())).toList();
     }
 
     public List<Metadata> loadById(String videoId) {
