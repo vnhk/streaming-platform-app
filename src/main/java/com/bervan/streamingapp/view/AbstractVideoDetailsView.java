@@ -4,6 +4,8 @@ import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -17,6 +19,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
     private final VideoManager videoManager;
 
     private final Div treeView;
+    private final Div content;
 
     public AbstractVideoDetailsView(BervanLogger logger, VideoManager videoManager) {
         super(ROUTE_NAME);
@@ -28,9 +31,10 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         treeView.addClassName("tree-view");
 
         // Add Tree View to the UI
-        Div content = new Div(treeView);
+        content = new Div();
         content.setSizeFull();
         content.addClassName("content-container");
+
         add(content);
     }
 
@@ -52,6 +56,16 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
             }
 
             Metadata rootFolder = directory.get(0);
+
+            String imageSrc = "/storage/videos/poster/" + rootFolder.getId();
+
+            Image image = new Image(imageSrc, rootFolder.getFilename());
+            image.setWidth("200px");
+            image.setHeight("70%");
+            image.getStyle().set("object-fit", "cover");
+
+            H3 title = new H3(rootFolder.getFilename());
+            content.add(image, title, treeView);
 
             // Generate HTML for the entire tree
             String treeHtml = generateTreeHtml(rootFolder);
@@ -96,8 +110,10 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                     appendFolderContent(htmlBuilder, item);
                 } else if (videoManager.getSupportedExtensions().contains(item.getExtension())) {
                     htmlBuilder.append("<li class='file-item'>");
-                    htmlBuilder.append("<span class='file-name'>").append(item.getFilename()).append("</span>");
-                    htmlBuilder.append("<button class='file-button' onclick='navigateToVideo(\"").append(item.getId()).append("\")'>Open</button>");
+                    htmlBuilder.append("<button class='file-button' onclick='navigateToVideo(\"")
+                            .append(item.getId()).append("\")'>")
+                            .append(item.getFilename())
+                            .append("</button>");
                     htmlBuilder.append("</li>");
                 }
             }
