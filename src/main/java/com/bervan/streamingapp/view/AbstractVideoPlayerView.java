@@ -3,6 +3,8 @@ package com.bervan.streamingapp.view;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
+import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.router.BeforeEvent;
@@ -30,15 +32,22 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     private void init(String videoFolderId) {
         try {
-            List<Metadata> directory = videoManager.loadById(videoFolderId);
+            List<Metadata> video = videoManager.loadById(videoFolderId);
 
-            if (directory.size() != 1) {
+            if (video.size() != 1) {
                 logger.error("Could not find video based on provided id!");
                 showErrorNotification("Could not find video!");
                 return;
             }
 
-//            Map<String, Metadata> files = videoManager.loadVideoDirectory(directory.get(0));
+            Metadata mainDirectory = videoManager.getMainVideoFolder(video.get(0));
+
+            Button detailsButton = new Button("Details");
+            detailsButton.addClassName("option-button");
+            detailsButton.addClickListener(click -> {
+                UI.getCurrent().navigate("/streaming-platform/details/" + mainDirectory.getId());
+            });
+            add(detailsButton);
 
             String videoSrc = "/storage/videos/video/" + videoFolderId;
 

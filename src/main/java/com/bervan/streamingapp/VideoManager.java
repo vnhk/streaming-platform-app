@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.*;
 
 @Service
@@ -66,5 +67,20 @@ public class VideoManager {
             result.put(key, new ArrayList<>());
         }
         result.get(key).add(file);
+    }
+
+    public Metadata getMainVideoFolder(Metadata video) {
+        Path path = Path.of(video.getPath());
+        while (path.getParent() != null) {
+            if (appFolder.endsWith(path.getParent().toString())) {
+                Path fileName = path.getFileName();
+                return fileServiceManager.loadByPathStartsWith(path.getParent().toString())
+                        .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
+            }
+
+            path = path.getParent();
+        }
+
+        return null;
     }
 }
