@@ -1,6 +1,6 @@
-package com.bervan.canvasapp.view;
+package com.bervan.streamingapp.view;
 
-import com.bervan.canvasapp.VideoManager;
+import com.bervan.streamingapp.VideoManager;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.vaadin.flow.component.UI;
@@ -11,7 +11,6 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
 
 import java.util.List;
-import java.util.Map;
 
 @Route(AbstractVideoListView.ROUTE_NAME)
 public abstract class AbstractVideoListView extends AbstractStreamingPage {
@@ -33,7 +32,6 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         List<Metadata> videosDirectories = videoManager.loadVideosDirectories();
         for (Metadata directory : videosDirectories) {
             try {
-                Map<String, Metadata> files = videoManager.loadVideoDirectory(directory);
 
 //                Metadata poster = files.get("POSTER"); // POSTER file (e.g., png/jpg)
 //                Metadata properties = files.get("PROPERTIES"); // PROPERTIES file (e.g., json)
@@ -69,7 +67,7 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
 
                 // Add click listener for navigation
                 tile.addClickListener(click ->
-                        UI.getCurrent().navigate(ROUTE_NAME + "/video-player/" + directory.getId())
+                        UI.getCurrent().navigate(ROUTE_NAME + "/details/" + directory.getId())
                 );
 
                 scrollingLayout.add(tile);

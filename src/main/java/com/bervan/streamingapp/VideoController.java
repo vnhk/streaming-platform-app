@@ -1,4 +1,4 @@
-package com.bervan.canvasapp;
+package com.bervan.streamingapp;
 
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
@@ -38,7 +38,11 @@ public class VideoController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Path file = Path.of(videoManager.getSrc(videoManager.loadVideoDirectory(metadata.get(0)).get("POSTER")));
+            List<Metadata> poster = videoManager.loadVideoDirectory(metadata.get(0)).get("POSTER");
+            if (poster == null) {
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+            Path file = Path.of(videoManager.getSrc(poster.get(0)));
             Resource resource = new UrlResource(file.toUri());
             if (!resource.exists() || !resource.isReadable()) {
                 return ResponseEntity.notFound().build();
@@ -54,17 +58,17 @@ public class VideoController {
         }
     }
 
-    @GetMapping("/video/{folderId}")
-    public ResponseEntity<Resource> serveVideo(@PathVariable String folderId) {
+    @GetMapping("/video/{videoId}")
+    public ResponseEntity<Resource> serveVideo(@PathVariable String videoId) {
         try {
-            List<Metadata> metadata = videoManager.loadById(folderId);
+            List<Metadata> metadata = videoManager.loadById(videoId);
 
             if (metadata.size() != 1) {
                 logger.error("Could not find file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Path file = Path.of(videoManager.getSrc(videoManager.loadVideoDirectory(metadata.get(0)).get("VIDEO")));
+            Path file = Path.of(videoManager.getSrc(metadata.get(0)));
 
             Resource resource = new UrlResource(file.toUri());
             if (!resource.exists() || !resource.isReadable()) {

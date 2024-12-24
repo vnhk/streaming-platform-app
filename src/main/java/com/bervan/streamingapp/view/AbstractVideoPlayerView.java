@@ -1,8 +1,8 @@
-package com.bervan.canvasapp.view;
+package com.bervan.streamingapp.view;
 
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
-import com.bervan.canvasapp.VideoManager;
+import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.router.BeforeEvent;

@@ -1,4 +1,4 @@
-package com.bervan.canvasapp;
+package com.bervan.streamingapp;
 
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
@@ -6,10 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class VideoManager {
@@ -43,18 +40,31 @@ public class VideoManager {
                 metadata.getPath() + File.separator + metadata.getFilename();
     }
 
-    public Map<String, Metadata> loadVideoDirectory(Metadata directory) {
-        Map<String, Metadata> result = new HashMap<>();
+    public List<String> getSupportedExtensions() {
+        return new ArrayList<>(supportedExtensions);
+    }
+
+    public Map<String, List<Metadata>> loadVideoDirectory(Metadata directory) {
+        Map<String, List<Metadata>> result = new HashMap<>();
         List<Metadata> files = fileServiceManager.loadByPathStartsWith(directory.getPath() + File.separator + directory.getFilename());
         for (Metadata file : files) {
             if (file.getFilename().equals("poster.png") || file.getFilename().equals("poster.jpg")) {
-                result.put("POSTER", file);
+                putIf("POSTER", result, file);
             } else if (file.getFilename().equals("properties.json")) {
-                result.put("PROPERTIES", file);
+                putIf("PROPERTIES", result, file);
             } else if (supportedExtensions.contains(file.getExtension())) {
-                result.put("VIDEO", file);
+                putIf("VIDEO", result, file);
+            } else if (file.isDirectory()) {
+                putIf("DIRECTORY", result, file);
             }
         }
         return result;
+    }
+
+    private static void putIf(String key, Map<String, List<Metadata>> result, Metadata file) {
+        if (!result.containsKey(key)) {
+            result.put(key, new ArrayList<>());
+        }
+        result.get(key).add(file);
     }
 }

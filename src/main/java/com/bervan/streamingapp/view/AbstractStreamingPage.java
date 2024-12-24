@@ -1,4 +1,4 @@
-package com.bervan.canvasapp.view;
+package com.bervan.streamingapp.view;
 
 import com.bervan.common.AbstractPageView;
 
