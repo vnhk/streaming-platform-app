@@ -120,6 +120,9 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
     }
 
     private static Image getImage(String text, String imageSrc) {
+        if (imageSrc == null || imageSrc.isBlank()) {
+            imageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
+        }
         Image image = new Image(imageSrc, text);
         image.setWidth("100%");
         image.setHeight("70%");
@@ -133,8 +136,8 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
                 .set("margin", "10px")
                 .set("cursor", "pointer")
                 .set("display", "inline-block")
-                .set("width", "400px")
-                .set("height", "600px")
+                .set("width", "320px")
+                .set("height", "440px")
                 .set("background", "#f3f3f3")
                 .set("border-radius", "8px")
                 .set("overflow", "hidden")
