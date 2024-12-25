@@ -5,11 +5,12 @@ import com.bervan.common.MenuNavigationComponent;
 
 public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
 
-    public StreamingPlatformPageLayout(String routeName) {
-        super(routeName);
+    public StreamingPlatformPageLayout(String routeName, String... notVisibleButtonRoutes) {
+        super(routeName, notVisibleButtonRoutes);
 
-        addButton(menuButtonsRow, AbstractVideoListView.ROUTE_NAME, "Home");
-        addButton(menuButtonsRow, AbstractVideoPlayerView.ROUTE_NAME, "Player");
+        addButtonIfVisible(menuButtonsRow, AbstractVideoListView.ROUTE_NAME, "Home");
+        addButtonIfVisible(menuButtonsRow, AbstractVideoDetailsView.ROUTE_NAME, "Details");
+        addButtonIfVisible(menuButtonsRow, AbstractVideoPlayerView.ROUTE_NAME, "Player");
 
         add(menuButtonsRow);
     }

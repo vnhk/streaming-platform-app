@@ -19,7 +19,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
     private final VideoManager videoManager;
 
     public AbstractVideoPlayerView(BervanLogger logger, VideoManager videoManager) {
-        super(ROUTE_NAME);
+        super(ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
         this.logger = logger;
         this.videoManager = videoManager;
     }

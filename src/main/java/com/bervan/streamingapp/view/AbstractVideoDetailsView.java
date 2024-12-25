@@ -22,7 +22,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
     private final Div content;
 
     public AbstractVideoDetailsView(BervanLogger logger, VideoManager videoManager) {
-        super(ROUTE_NAME);
+        super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME);
         this.logger = logger;
         this.videoManager = videoManager;
 

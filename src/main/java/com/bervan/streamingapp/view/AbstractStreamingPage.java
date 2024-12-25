@@ -4,7 +4,7 @@ import com.bervan.common.AbstractPageView;
 
 public abstract class AbstractStreamingPage extends AbstractPageView {
 
-    public AbstractStreamingPage(String route) {
-        add(new StreamingPlatformPageLayout(route));
+    public AbstractStreamingPage(String route, String... notVisibleButtonRoutes) {
+        add(new StreamingPlatformPageLayout(route, notVisibleButtonRoutes));
     }
 }
