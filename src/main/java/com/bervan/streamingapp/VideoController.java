@@ -2,17 +2,17 @@ package com.bervan.streamingapp;
 
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -59,29 +59,41 @@ public class VideoController {
     }
 
     @GetMapping("/video/{videoId}")
-    public ResponseEntity<Resource> serveVideo(@PathVariable String videoId) {
-        try {
-            List<Metadata> metadata = videoManager.loadById(videoId);
+    public ResponseEntity<ResourceRegion> getVideo(
+            @PathVariable String videoId,
+            @RequestHeader(value = "Range", required = false) String httpRangeList
+    ) throws IOException {
+        List<Metadata> metadata = videoManager.loadById(videoId);
 
-            if (metadata.size() != 1) {
-                logger.error("Could not find file based on provided id!");
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            }
-
-            Path file = Path.of(videoManager.getSrc(metadata.get(0)));
-
-            Resource resource = new UrlResource(file.toUri());
-            if (!resource.exists() || !resource.isReadable()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok()
-                    .contentType(MediaTypeFactory.getMediaType(resource)
-                            .orElse(MediaType.APPLICATION_OCTET_STREAM))
-                    .body(resource);
-        } catch (Exception e) {
-            logger.error(e);
-            throw new RuntimeException(e);
+        if (metadata.size() != 1) {
+            logger.error("Could not find file based on provided id!");
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
+
+        Path file = Path.of(videoManager.getSrc(metadata.get(0)));
+        FileSystemResource videoResource = new FileSystemResource(file);
+
+        long contentLength = videoResource.contentLength();
+        ResourceRegion region;
+        long rangeLength = 0;
+        long start = 0, end;
+
+        if (httpRangeList == null) {
+            region = new ResourceRegion(videoResource, 0, contentLength);
+        } else {
+            String[] ranges = httpRangeList.replace("bytes=", "").split("-");
+            start = Long.parseLong(ranges[0]);
+            end = ranges.length > 1 ? Long.parseLong(ranges[1]) : contentLength - 1;
+            rangeLength = Math.min(1_000_000, end - start + 1); // np. 1MB fragment
+            region = new ResourceRegion(videoResource, start, rangeLength);
+        }
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .contentType(MediaTypeFactory
+                        .getMediaType(videoResource)
+                        .orElse(MediaType.APPLICATION_OCTET_STREAM))
+                .header("Accept-Ranges", "bytes")
+                .contentLength(rangeLength)
+                .body(region);
     }
 }

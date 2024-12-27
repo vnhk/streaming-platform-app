@@ -76,7 +76,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             videoContainer.getElement().setProperty("innerHTML",
                     "<video id='videoPlayer' width='800' height='450' controls>" +
                             "  <source src='" + videoSrc + "' type='video/mp4'>" +
-                            "  Your browser does not support the video tag." +
                             "</video>");
             add(videoContainer);
 
