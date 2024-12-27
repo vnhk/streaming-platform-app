@@ -75,7 +75,7 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         List<Metadata> videos = videoManager.loadVideos();
         for (Metadata video : videos) {
             try {
-                Metadata mainDirectory = videoManager.getMainVideoFolder(video);
+                Metadata mainDirectory = videoManager.getMainMovieFolder(video);
 
                 String imageSrc = "";
                 String altText = "Not found";

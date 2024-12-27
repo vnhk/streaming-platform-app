@@ -6,15 +6,14 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.core.io.support.ResourceRegion;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/storage/videos")
@@ -38,7 +37,7 @@ public class VideoController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            List<Metadata> poster = videoManager.loadVideoDirectory(metadata.get(0)).get("POSTER");
+            List<Metadata> poster = videoManager.loadVideoDirectoryContent(metadata.get(0)).get("POSTER");
             if (poster == null) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
@@ -55,6 +54,47 @@ public class VideoController {
         } catch (Exception e) {
             logger.error(e);
             throw new RuntimeException(e);
+        }
+    }
+
+    @GetMapping(value = "/subtitles/{videoId}/{language}", produces = "text/vtt")
+    public ResponseEntity<Resource> getSubtitles(@PathVariable String videoId, @PathVariable String language) {
+        try {
+            List<Metadata> metadata = videoManager.loadById(videoId);
+
+            if (metadata.size() != 1) {
+                logger.error("Could not find file based on provided id!");
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            Metadata videoFolder = videoManager.getVideoFolder(metadata.get(0));
+            List<Metadata> subtitles = videoManager.loadVideoDirectoryContent(videoFolder).get("SUBTITLES");
+            if (subtitles == null) {
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            Optional<Metadata> subtitle = subtitles.stream().filter(e -> e.getFilename().contains(language))
+                    .findFirst();
+            if (subtitle.isPresent()) {
+
+                Path subtitlesPath = Path.of(videoManager.getSrc(subtitle.get()));
+
+                Resource resource = new UrlResource(subtitlesPath.toUri());
+                if (resource.exists() && resource.isReadable()) {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.valueOf("text/vtt"));
+
+                    return ResponseEntity
+                            .ok()
+                            .headers(headers)
+                            .body(resource);
+                } else {
+                    return ResponseEntity.notFound().build();
+                }
+            }
+            return ResponseEntity.notFound().build();
+        } catch (MalformedURLException e) {
+            return ResponseEntity.badRequest().build();
         }
     }
 

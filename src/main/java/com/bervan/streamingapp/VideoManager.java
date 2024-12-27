@@ -52,14 +52,16 @@ public class VideoManager {
         return new ArrayList<>(supportedExtensions);
     }
 
-    public Map<String, List<Metadata>> loadVideoDirectory(Metadata directory) {
+    public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
         Map<String, List<Metadata>> result = new HashMap<>();
-        List<Metadata> files = fileServiceManager.loadByPathStartsWith(directory.getPath() + File.separator + directory.getFilename());
+        Set<Metadata> files = fileServiceManager.loadByPath(directory.getPath() + File.separator + directory.getFilename());
         for (Metadata file : files) {
             if (file.getFilename().equals("poster.png") || file.getFilename().equals("poster.jpg")) {
                 putIf("POSTER", result, file);
             } else if (file.getFilename().equals("properties.json")) {
                 putIf("PROPERTIES", result, file);
+            } else if (file.getFilename().endsWith("vtt")) {
+                putIf("SUBTITLES", result, file);
             } else if (supportedExtensions.contains(file.getExtension())) {
                 putIf("VIDEO", result, file);
             } else if (file.isDirectory()) {
@@ -76,7 +78,7 @@ public class VideoManager {
         result.get(key).add(file);
     }
 
-    public Metadata getMainVideoFolder(Metadata video) {
+    public Metadata getMainMovieFolder(Metadata video) {
         Path path = Path.of(video.getPath());
         while (path.getParent() != null) {
             if (appFolder.endsWith(path.getParent().toString())) {
@@ -86,6 +88,18 @@ public class VideoManager {
             }
 
             path = path.getParent();
+        }
+
+        return null;
+    }
+
+    public Metadata getVideoFolder(Metadata video) {
+        Path path = Path.of(video.getPath());
+        while (path.getParent() != null) {
+            Path fileName = path.getFileName();
+            return fileServiceManager.loadByPathStartsWith(path.getParent().toString())
+                    .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
+
         }
 
         return null;

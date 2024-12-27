@@ -30,9 +30,9 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
         init(videoId);
     }
 
-    private void init(String videoFolderId) {
+    private void init(String videoId) {
         try {
-            List<Metadata> video = videoManager.loadById(videoFolderId);
+            List<Metadata> video = videoManager.loadById(videoId);
 
             if (video.size() != 1) {
                 logger.error("Could not find video based on provided id!");
@@ -40,7 +40,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                 return;
             }
 
-            Metadata mainDirectory = videoManager.getMainVideoFolder(video.get(0));
+            Metadata mainDirectory = videoManager.getMainMovieFolder(video.get(0));
 
             if(mainDirectory != null) {
                 Button detailsButton = new Button("Details");
@@ -51,7 +51,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                 add(detailsButton);
             }
 
-            String videoSrc = "/storage/videos/video/" + videoFolderId;
+            String videoSrc = "/storage/videos/video/" + videoId;
 
             setSizeFull();
             setSpacing(false);
@@ -73,10 +73,22 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                     .set("margin-top", "20px");
 
             // Add HTML <video> element as a child
-            videoContainer.getElement().setProperty("innerHTML",
+            videoContainer.getElement().setProperty(
+                    "innerHTML",
                     "<video id='videoPlayer' width='800' height='450' controls>" +
                             "  <source src='" + videoSrc + "' type='video/mp4'>" +
-                            "</video>");
+                            "  <track kind='subtitles' " +
+                            "         src='/storage/videos/subtitles/" + videoId + "/pl' " +
+                            "         srclang='pl' " +
+                            "         label='Polish' " +
+                            "         default>" +
+                            "  <track kind='subtitles' " +
+                            "         src='/storage/videos/subtitles/" + videoId + "/en' " +
+                            "         srclang='en' " +
+                            "         label='English' " +
+                            "         >" +
+                            "</video>"
+            );
             add(videoContainer);
 
             // Add custom controls if needed

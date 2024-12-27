@@ -98,7 +98,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .append(folder.getFilename()).append("</span>");
 
         // Load directory content
-        Map<String, List<Metadata>> content = videoManager.loadVideoDirectory(folder);
+        Map<String, List<Metadata>> content = videoManager.loadVideoDirectoryContent(folder);
         List<Metadata> subfoldersAndFiles = content.values().stream()
                 .flatMap(List::stream)
                 .toList();
