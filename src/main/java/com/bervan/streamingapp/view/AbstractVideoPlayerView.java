@@ -137,6 +137,9 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "  if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "  }" +
+                            "  if (event.key === 'Spacebar') {" +
+                            toggleStartStop() +
+                            "  }" +
                             "});"
             );
 
@@ -160,6 +163,15 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             logger.error("Could not load video!", e);
             showErrorNotification("Could not load video!");
         }
+    }
+
+    private String toggleStartStop() {
+        return "  var videoPlayer = document.getElementById('videoPlayer'); " +
+                "    if (videoPlayer.paused) { " +
+                "        videoPlayer.play(); " +
+                "    } else { " +
+                "        videoPlayer.pause(); " +
+                "    }";
     }
 
     private static String toggleSubtitles() {
