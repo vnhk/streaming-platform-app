@@ -7,6 +7,7 @@ import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -57,21 +58,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             setSpacing(false);
             setPadding(true);
 
-            // Title
-            Div title = new Div();
-            title.setText("Advanced Video Player");
-            title.getStyle()
-                    .set("font-size", "24px")
-                    .set("font-weight", "bold");
-            add(title);
-
             // Create a Div to contain the video player
             Div videoContainer = new Div();
-            videoContainer.getStyle()
-                    .set("display", "flex")
-                    .set("justify-content", "center")
-                    .set("margin-top", "20px");
-
 
             // Add custom controls if needed
             NativeButton playButton = new NativeButton("Play", e -> {
@@ -95,11 +83,13 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    justify-content: center;" +
                             "    align-items: center;" +
                             "    flex-direction: column;" +
-                            "    margin-top: 20px;" +
-                            "    padding: 20px;" +
-                            "    background-color: #f4f4f4;" +
-                            "    border-radius: 12px;" +
-                            "    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);" +
+                            "    width: 100%; " +
+                            "  }" +
+                            "  #videoPlayer {" +
+                            "    width: 90vw; " +
+                            "    height: 80vh;" +
+                            "    max-width: 100%; " +
+                            "    max-height: 100%; " +
                             "  }" +
                             "  .custom-button {" +
                             "    margin: 10px;" +
@@ -123,7 +113,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             videoContainer.getElement().setProperty(
                     "innerHTML",
                     "<div id='videoContainer'>" +
-                            "  <video id='videoPlayer' width='800' height='450' controls>" +
+                            "  <video id='videoPlayer' controls>" +
                             "    <source src='" + videoSrc + "' type='video/mp4'>" +
                             "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
                             "    <track id='trackPL' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/pl' srclang='pl' label='Polish'>" +
@@ -139,7 +129,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             toggleSubtitlesButton.addClassName("custom-button");
 
             add(videoContainer);
-            add(playButton, pauseButton, toggleSubtitlesButton);
+            add(new HorizontalLayout(playButton, pauseButton, toggleSubtitlesButton));
 
             // Keyboard shortcut "B" for toggling subtitles
             getElement().executeJs(
