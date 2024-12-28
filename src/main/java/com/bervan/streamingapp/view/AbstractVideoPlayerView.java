@@ -147,6 +147,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             plusTimeVideo() +
                             "  } else if (event.key === 'ArrowLeft') {" +
                             minusTimeVideo() +
+                            "  } else if (event.key === 'f') {" +
+                            toggleFullscreen() +
                             "  }" +
                             "});"
             );
@@ -154,6 +156,22 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             logger.error("Could not load video!", e);
             showErrorNotification("Could not load video!");
         }
+    }
+
+    private String toggleFullscreen() {
+        return "  var video = document.getElementById('videoPlayer'); " +
+                "  if (!video) return; " +
+                " if(document.fullscreenElement === video) {" +
+                "   document.exitFullscreen(); " +
+                " } else {" +
+                "   if (video.requestFullscreen) { " +
+                "       video.requestFullscreen(); " +
+                "   } else if (video.webkitRequestFullscreen) { /* Safari */ " +
+                "        video.webkitRequestFullscreen(); " +
+                "   } else if ( video.msRequestFullscreen) { /* IE11 */ " +
+                "        video.msRequestFullscreen(); " +
+                "   } " +
+                " } ";
     }
 
     private String plusTimeVideo() {
