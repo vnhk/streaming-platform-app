@@ -131,31 +131,22 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             add(videoContainer);
             add(new HorizontalLayout(playButton, pauseButton, toggleSubtitlesButton));
 
-            // Keyboard shortcut "B" for toggling subtitles
             getElement().executeJs(
-                    "document.addEventListener('keydown', function(event) {" +
+                    " let isKeyDown = false; " +
+                            " document.addEventListener('keydown', function(event) {" +
+                            "        if (isKeyDown) return;  " +
+                            "        isKeyDown = true;  " +
+                            "        setTimeout(() => {  " +
+                            "            isKeyDown = false; " +
+                            "        }, 333); " +
                             "  if (event.key === 'b') {" +
                             toggleSubtitles() +
-                            "  }" +
-                            "  if (event.key === 'Spacebar') {" +
+                            "  } else if (event.key === 'Spacebar' || event.key === ' ') {" +
                             toggleStartStop() +
-                            "  }" +
-                            "});"
-            );
-
-
-            // JavaScript for keyboard event handling
-            getElement().executeJs(
-                    "document.addEventListener('keydown', function(event) {" +
-                            "  const video = document.getElementById('videoPlayer');" +
-                            "  if (!video) return;" +
-                            "  switch (event.key) {" +
-                            "    case 'ArrowRight':" +
-                            "      video.currentTime += 5;" +
-                            "      break;" +
-                            "    case 'ArrowLeft':" +
-                            "      video.currentTime -= 5;" +
-                            "      break;" +
+                            "  } else if (event.key === 'ArrowRight') {" +
+                            plusTimeVideo() +
+                            "  } else if (event.key === 'ArrowLeft') {" +
+                            minusTimeVideo() +
                             "  }" +
                             "});"
             );
@@ -165,8 +156,21 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
         }
     }
 
+    private String plusTimeVideo() {
+        return "  var video = document.getElementById('videoPlayer'); " +
+                "  if (!video) return; " +
+                "  video.currentTime += 5; ";
+    }
+
+    private String minusTimeVideo() {
+        return "  var video = document.getElementById('videoPlayer'); " +
+                "  if (!video) return; " +
+                "  video.currentTime -= 5; ";
+    }
+
     private String toggleStartStop() {
         return "  var videoPlayer = document.getElementById('videoPlayer'); " +
+                " event.preventDefault(); " +
                 "    if (videoPlayer.paused) { " +
                 "        videoPlayer.play(); " +
                 "    } else { " +
