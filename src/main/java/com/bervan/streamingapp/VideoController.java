@@ -7,10 +7,10 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
+import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -57,7 +57,7 @@ public class VideoController {
         }
     }
 
-    @GetMapping(value = "/subtitles/{videoId}/{language}", produces = "text/vtt")
+    @GetMapping(value = "/subtitles/{videoId}/{language}")
     public ResponseEntity<Resource> getSubtitles(@PathVariable String videoId, @PathVariable String language) {
         try {
             List<Metadata> metadata = videoManager.loadById(videoId);
@@ -73,13 +73,11 @@ public class VideoController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Optional<Metadata> subtitle = subtitles.stream().filter(e -> e.getFilename().contains(language))
+            Optional<Metadata> subtitle = subtitles.stream().filter(e -> e.getFilename().endsWith(language + "." + e.getExtension()))
                     .findFirst();
             if (subtitle.isPresent()) {
 
-                Path subtitlesPath = Path.of(videoManager.getSrc(subtitle.get()));
-
-                Resource resource = new UrlResource(subtitlesPath.toUri());
+                Resource resource = getSubtitleResource(subtitle.get());
                 if (resource.exists() && resource.isReadable()) {
                     HttpHeaders headers = new HttpHeaders();
                     headers.setContentType(MediaType.valueOf("text/vtt"));
@@ -93,9 +91,20 @@ public class VideoController {
                 }
             }
             return ResponseEntity.notFound().build();
-        } catch (MalformedURLException e) {
+        } catch (IOException e) {
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    private Resource getSubtitleResource(Metadata subtitle) throws IOException {
+        if (subtitle.getExtension().equals("vtt")) {
+            Path subtitlesPath = Path.of(videoManager.getSrc(subtitle));
+            return new UrlResource(subtitlesPath.toUri());
+        } else if (subtitle.getExtension().equals("srt")) {
+            return new InMemoryResource(videoManager.convertSrtToVtt(subtitle));
+        }
+
+        throw new RuntimeException(subtitle.getExtension() + " is not supported for subtitles!");
     }
 
     @GetMapping("/video/{videoId}")

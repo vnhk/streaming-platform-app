@@ -72,35 +72,84 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                     .set("justify-content", "center")
                     .set("margin-top", "20px");
 
-            // Add HTML <video> element as a child
-            videoContainer.getElement().setProperty(
-                    "innerHTML",
-                    "<video id='videoPlayer' width='800' height='450' controls>" +
-                            "  <source src='" + videoSrc + "' type='video/mp4'>" +
-                            "  <track kind='subtitles' " +
-                            "         src='/storage/videos/subtitles/" + videoId + "/pl' " +
-                            "         srclang='pl' " +
-                            "         label='Polish' " +
-                            "         default>" +
-                            "  <track kind='subtitles' " +
-                            "         src='/storage/videos/subtitles/" + videoId + "/en' " +
-                            "         srclang='en' " +
-                            "         label='English' " +
-                            "         >" +
-                            "</video>"
-            );
-            add(videoContainer);
 
             // Add custom controls if needed
             NativeButton playButton = new NativeButton("Play", e -> {
                 getElement().executeJs("document.getElementById('videoPlayer').play()");
             });
 
+            playButton.addClassName("custom-button");
+
             NativeButton pauseButton = new NativeButton("Pause", e -> {
                 getElement().executeJs("document.getElementById('videoPlayer').pause()");
             });
 
-            add(playButton, pauseButton);
+            pauseButton.addClassName("custom-button");
+
+            // Add CSS styles directly into the page
+            getElement().executeJs(
+                    "const style = document.createElement('style');" +
+                            "style.textContent = `" +
+                            "  #videoContainer {" +
+                            "    display: flex;" +
+                            "    justify-content: center;" +
+                            "    align-items: center;" +
+                            "    flex-direction: column;" +
+                            "    margin-top: 20px;" +
+                            "    padding: 20px;" +
+                            "    background-color: #f4f4f4;" +
+                            "    border-radius: 12px;" +
+                            "    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);" +
+                            "  }" +
+                            "  .custom-button {" +
+                            "    margin: 10px;" +
+                            "    padding: 10px 20px;" +
+                            "    border: none;" +
+                            "    background-color: #007bff;" +
+                            "    color: white;" +
+                            "    font-size: 16px;" +
+                            "    border-radius: 5px;" +
+                            "    cursor: pointer;" +
+                            "    transition: background-color 0.3s ease;" +
+                            "  }" +
+                            "  .custom-button:hover {" +
+                            "    background-color: #0056b3;" +
+                            "  }" +
+                            "`;" +
+                            "document.head.appendChild(style);"
+            );
+
+            // HTML Video Player
+            videoContainer.getElement().setProperty(
+                    "innerHTML",
+                    "<div id='videoContainer'>" +
+                            "  <video id='videoPlayer' width='800' height='450' controls>" +
+                            "    <source src='" + videoSrc + "' type='video/mp4'>" +
+                            "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
+                            "    <track id='trackPL' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/pl' srclang='pl' label='Polish'>" +
+                            "  </video>" +
+                            "</div>"
+            );
+
+            NativeButton toggleSubtitlesButton = new NativeButton("Toggle Subtitles", e -> {
+                getElement().executeJs(
+                        toggleSubtitles()
+                );
+            });
+            toggleSubtitlesButton.addClassName("custom-button");
+
+            add(videoContainer);
+            add(playButton, pauseButton, toggleSubtitlesButton);
+
+            // Keyboard shortcut "B" for toggling subtitles
+            getElement().executeJs(
+                    "document.addEventListener('keydown', function(event) {" +
+                            "  if (event.key === 'b') {" +
+                            toggleSubtitles() +
+                            "  }" +
+                            "});"
+            );
+
 
             // JavaScript for keyboard event handling
             getElement().executeJs(
@@ -121,5 +170,16 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             logger.error("Could not load video!", e);
             showErrorNotification("Could not load video!");
         }
+    }
+
+    private static String toggleSubtitles() {
+        return "    var video = document.getElementById('videoPlayer'); " +
+                "   if(video.textTracks[0].mode == 'hidden') { " +
+                "          video.textTracks[0].mode = 'showing'; " +
+                "          video.textTracks[1].mode = 'hidden'; " +
+                "   } else { " +
+                "          video.textTracks[0].mode = 'hidden'; " +
+                "          video.textTracks[1].mode = 'showing'; " +
+                "   } ";
     }
 }

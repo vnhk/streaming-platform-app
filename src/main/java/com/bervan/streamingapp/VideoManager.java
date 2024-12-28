@@ -6,7 +6,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 @Service
@@ -60,7 +63,7 @@ public class VideoManager {
                 putIf("POSTER", result, file);
             } else if (file.getFilename().equals("properties.json")) {
                 putIf("PROPERTIES", result, file);
-            } else if (file.getFilename().endsWith("vtt")) {
+            } else if (file.getFilename().endsWith("vtt") || file.getFilename().endsWith("srt")) {
                 putIf("SUBTITLES", result, file);
             } else if (supportedExtensions.contains(file.getExtension())) {
                 putIf("VIDEO", result, file);
@@ -103,5 +106,15 @@ public class VideoManager {
         }
 
         return null;
+    }
+
+    public String convertSrtToVtt(Metadata subtitle) throws IOException {
+        Path inputPath = Paths.get(getSrc(subtitle));
+        String content = Files.readString(inputPath);
+
+        String vttContent = "WEBVTT\n\n" + content.replace(",", ".");
+        vttContent = vttContent.replaceAll("\\d+\\n", "");
+
+        return vttContent;
     }
 }
