@@ -43,7 +43,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             Metadata mainDirectory = videoManager.getMainMovieFolder(video.get(0));
 
             if(mainDirectory != null) {
-                Button detailsButton = new Button("Details");
+                Button detailsButton = new Button(mainDirectory.getFilename() + " - Details");
                 detailsButton.addClassName("option-button");
                 detailsButton.addClickListener(click -> {
                     UI.getCurrent().navigate("/streaming-platform/details/" + mainDirectory.getId());
