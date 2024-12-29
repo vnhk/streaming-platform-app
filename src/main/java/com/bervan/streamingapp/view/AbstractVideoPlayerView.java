@@ -188,7 +188,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     private String toggleStartStop() {
         return "  var videoPlayer = document.getElementById('videoPlayer'); " +
-                " event.preventDefault(); " +
                 "    if (videoPlayer.paused) { " +
                 "        videoPlayer.play(); " +
                 "    } else { " +
