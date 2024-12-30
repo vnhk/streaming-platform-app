@@ -25,13 +25,13 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         this.logger = logger;
         this.videoManager = videoManager;
 
-        HorizontalLayout groupedVideosLayout = groupedVideos(logger, videoManager);
-        HorizontalLayout allVideosLayout = allVideos(logger, videoManager);
+        HorizontalLayout groupedVideosLayout = groupedVideos(logger);
+        HorizontalLayout allVideosLayout = allVideos(logger);
 
         add(new H3("Movies/TV Series:"), groupedVideosLayout, new Hr(), new H3("All Videos"), allVideosLayout);
     }
 
-    private HorizontalLayout groupedVideos(BervanLogger logger, VideoManager videoManager) {
+    private HorizontalLayout groupedVideos(BervanLogger logger) {
         HorizontalLayout scrollingLayout = new HorizontalLayout();
         scrollingLayout.getStyle()
                 .set("overflow-x", "auto")
@@ -65,7 +65,7 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         return scrollingLayout;
     }
 
-    private HorizontalLayout allVideos(BervanLogger logger, VideoManager videoManager) {
+    private HorizontalLayout allVideos(BervanLogger logger) {
         HorizontalLayout scrollingLayout = new HorizontalLayout();
         scrollingLayout.getStyle()
                 .set("overflow-x", "auto")
