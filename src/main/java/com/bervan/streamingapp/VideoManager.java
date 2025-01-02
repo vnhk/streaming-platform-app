@@ -33,31 +33,39 @@ public class VideoManager {
 
     public List<Metadata> loadVideosMainDirectories() {
         SearchRequest searchRequest = new SearchRequest();
-                searchRequest.addCriterion("G1", Metadata.class, "path",
+        searchRequest.addCriterion("G1", Metadata.class, "path",
                 SearchOperation.EQUALS_OPERATION, appFolder.substring(1));
         searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
                 SearchOperation.EQUALS_OPERATION, true);
 
-        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        SearchQueryOption options = new SearchQueryOption(Metadata.class);
+        options.setSortField("filename");
+        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
         return response.getResultList();
     }
 
     public List<Metadata> loadVideos() {
         SearchRequest searchRequest = new SearchRequest();
-                searchRequest.addCriterion("G1", Metadata.class, "path",
+        searchRequest.addCriterion("G1", Metadata.class, "path",
                 SearchOperation.LIKE_OPERATION, appFolder.substring(1) + "%"); //startsWith
         searchRequest.addCriterion("G1", Metadata.class, "extension",
                 SearchOperation.IN_OPERATION, supportedExtensions);
 
-        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        SearchQueryOption options = new SearchQueryOption(Metadata.class);
+        options.setSortField("filename");
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
         return response.getResultList();
     }
 
     public List<Metadata> loadById(String metadataId) {
         SearchRequest searchRequest = new SearchRequest();
-                searchRequest.addIdEqualsCriteria("G1", Metadata.class, UUID.fromString(metadataId));
+        searchRequest.addIdEqualsCriteria("G1", Metadata.class, UUID.fromString(metadataId));
 
-        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        SearchQueryOption options = new SearchQueryOption(Metadata.class);
+        options.setSortField("filename");
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
         return response.getResultList();
     }
 
@@ -72,12 +80,14 @@ public class VideoManager {
 
     public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
         SearchRequest searchRequest = new SearchRequest();
-                searchRequest.addCriterion("G1", Metadata.class, "path",
+        searchRequest.addCriterion("G1", Metadata.class, "path",
                 SearchOperation.EQUALS_OPERATION, directory.getPath() + File.separator + directory.getFilename());
 
-        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
-        List<Metadata> files = response.getResultList();
+        SearchQueryOption options = new SearchQueryOption(Metadata.class);
+        options.setSortField("filename");
 
+        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
+        List<Metadata> files = response.getResultList();
 
         Map<String, List<Metadata>> result = new HashMap<>();
         for (Metadata file : files) {
@@ -109,10 +119,13 @@ public class VideoManager {
             if (appFolder.endsWith(path.getParent().toString())) {
                 Path fileName = path.getFileName();
                 SearchRequest searchRequest = new SearchRequest();
-                                searchRequest.addCriterion("G1", Metadata.class, "path",
+                searchRequest.addCriterion("G1", Metadata.class, "path",
                         SearchOperation.EQUALS_OPERATION, path.getParent().toString());
 
-                SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+                SearchQueryOption options = new SearchQueryOption(Metadata.class);
+                options.setSortField("filename");
+
+                SearchResponse<Metadata> response = searchService.search(searchRequest, options);
 
                 return response.getResultList()
                         .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
@@ -129,10 +142,13 @@ public class VideoManager {
         while (path.getParent() != null) {
             Path fileName = path.getFileName();
             SearchRequest searchRequest = new SearchRequest();
-                        searchRequest.addCriterion("G1", Metadata.class, "path",
+            searchRequest.addCriterion("G1", Metadata.class, "path",
                     SearchOperation.EQUALS_OPERATION, path.getParent().toString());
 
-            SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+            SearchQueryOption options = new SearchQueryOption(Metadata.class);
+            options.setSortField("filename");
+
+            SearchResponse<Metadata> response = searchService.search(searchRequest, options);
 
             return response.getResultList()
                     .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
