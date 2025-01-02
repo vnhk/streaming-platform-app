@@ -1,7 +1,11 @@
 package com.bervan.streamingapp;
 
+import com.bervan.common.search.SearchQueryOption;
+import com.bervan.common.search.SearchRequest;
+import com.bervan.common.search.SearchService;
+import com.bervan.common.search.model.SearchOperation;
+import com.bervan.common.search.model.SearchResponse;
 import com.bervan.filestorage.model.Metadata;
-import com.bervan.filestorage.service.FileServiceManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,29 +25,40 @@ public class VideoManager {
 
     private final List<String> supportedExtensions = Arrays.asList("mp4");
 
-    private final FileServiceManager fileServiceManager;
+    private final SearchService searchService;
 
-    public VideoManager(FileServiceManager fileServiceManager) {
-        this.fileServiceManager = fileServiceManager;
+    public VideoManager(SearchService searchService) {
+        this.searchService = searchService;
     }
 
     public List<Metadata> loadVideosMainDirectories() {
-        return fileServiceManager.loadVideosByPathStartsWith(appFolder.substring(1))
-                .stream().filter(Metadata::isDirectory)
-                .filter(e -> e.getPath().equals(appFolder.substring(1)))
-                .toList(); //replace first / or \
+        SearchRequest searchRequest = new SearchRequest();
+                searchRequest.addCriterion("G1", Metadata.class, "path",
+                SearchOperation.EQUALS_OPERATION, appFolder.substring(1));
+        searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
+                SearchOperation.EQUALS_OPERATION, true);
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        return response.getResultList();
     }
 
     public List<Metadata> loadVideos() {
-        return fileServiceManager.loadVideosByPathStartsWith(appFolder.substring(1)).stream()
-                .filter(e -> supportedExtensions.contains(e.getExtension())).toList();
+        SearchRequest searchRequest = new SearchRequest();
+                searchRequest.addCriterion("G1", Metadata.class, "path",
+                SearchOperation.LIKE_OPERATION, appFolder.substring(1) + "%"); //startsWith
+        searchRequest.addCriterion("G1", Metadata.class, "extension",
+                SearchOperation.IN_OPERATION, supportedExtensions);
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        return response.getResultList();
     }
 
-    public List<Metadata> loadById(String videoId) {
-        return fileServiceManager.loadVideoById(videoId)
-                .stream()
-                .filter(e -> (File.separator + e.getPath()).startsWith(appFolder))
-                .toList();
+    public List<Metadata> loadById(String metadataId) {
+        SearchRequest searchRequest = new SearchRequest();
+                searchRequest.addIdEqualsCriteria("G1", Metadata.class, UUID.fromString(metadataId));
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        return response.getResultList();
     }
 
     public String getSrc(Metadata metadata) {
@@ -56,8 +71,15 @@ public class VideoManager {
     }
 
     public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
+        SearchRequest searchRequest = new SearchRequest();
+                searchRequest.addCriterion("G1", Metadata.class, "path",
+                SearchOperation.EQUALS_OPERATION, directory.getPath() + File.separator + directory.getFilename());
+
+        SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+        List<Metadata> files = response.getResultList();
+
+
         Map<String, List<Metadata>> result = new HashMap<>();
-        Set<Metadata> files = fileServiceManager.loadByPath(directory.getPath() + File.separator + directory.getFilename());
         for (Metadata file : files) {
             if (file.getFilename().equals("poster.png") || file.getFilename().equals("poster.jpg")) {
                 putIf("POSTER", result, file);
@@ -86,7 +108,13 @@ public class VideoManager {
         while (path.getParent() != null) {
             if (appFolder.endsWith(path.getParent().toString())) {
                 Path fileName = path.getFileName();
-                return fileServiceManager.loadVideosByPathStartsWith(path.getParent().toString())
+                SearchRequest searchRequest = new SearchRequest();
+                                searchRequest.addCriterion("G1", Metadata.class, "path",
+                        SearchOperation.EQUALS_OPERATION, path.getParent().toString());
+
+                SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+
+                return response.getResultList()
                         .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
             }
 
@@ -100,7 +128,13 @@ public class VideoManager {
         Path path = Path.of(video.getPath());
         while (path.getParent() != null) {
             Path fileName = path.getFileName();
-            return fileServiceManager.loadVideosByPathStartsWith(path.getParent().toString())
+            SearchRequest searchRequest = new SearchRequest();
+                        searchRequest.addCriterion("G1", Metadata.class, "path",
+                    SearchOperation.EQUALS_OPERATION, path.getParent().toString());
+
+            SearchResponse<Metadata> response = searchService.search(searchRequest, new SearchQueryOption(Metadata.class));
+
+            return response.getResultList()
                     .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
 
         }
