@@ -28,19 +28,19 @@ public class VideoManager {
     }
 
     public List<Metadata> loadVideosMainDirectories() {
-        return fileServiceManager.loadByPathStartsWith(appFolder.substring(1))
+        return fileServiceManager.loadVideosByPathStartsWith(appFolder.substring(1))
                 .stream().filter(Metadata::isDirectory)
                 .filter(e -> e.getPath().equals(appFolder.substring(1)))
                 .toList(); //replace first / or \
     }
 
     public List<Metadata> loadVideos() {
-        return fileServiceManager.loadByPathStartsWith(appFolder.substring(1)).stream()
+        return fileServiceManager.loadVideosByPathStartsWith(appFolder.substring(1)).stream()
                 .filter(e -> supportedExtensions.contains(e.getExtension())).toList();
     }
 
     public List<Metadata> loadById(String videoId) {
-        return fileServiceManager.loadById(videoId)
+        return fileServiceManager.loadVideoById(videoId)
                 .stream()
                 .filter(e -> (File.separator + e.getPath()).startsWith(appFolder))
                 .toList();
@@ -86,7 +86,7 @@ public class VideoManager {
         while (path.getParent() != null) {
             if (appFolder.endsWith(path.getParent().toString())) {
                 Path fileName = path.getFileName();
-                return fileServiceManager.loadByPathStartsWith(path.getParent().toString())
+                return fileServiceManager.loadVideosByPathStartsWith(path.getParent().toString())
                         .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
             }
 
@@ -100,7 +100,7 @@ public class VideoManager {
         Path path = Path.of(video.getPath());
         while (path.getParent() != null) {
             Path fileName = path.getFileName();
-            return fileServiceManager.loadByPathStartsWith(path.getParent().toString())
+            return fileServiceManager.loadVideosByPathStartsWith(path.getParent().toString())
                     .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
 
         }
