@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -160,8 +161,13 @@ public class VideoManager {
 
     public String convertSrtToVtt(Metadata subtitle) throws IOException {
         Path inputPath = Paths.get(getSrc(subtitle));
-        String content = Files.readString(inputPath);
 
+        String content;
+        try {
+            content = Files.readString(inputPath, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            content = Files.readString(inputPath, StandardCharsets.ISO_8859_1);
+        }
         String vttContent = "WEBVTT\n\n" + content.replace(",", ".");
         vttContent = vttContent.replaceAll("\\d+\\n", "");
 
