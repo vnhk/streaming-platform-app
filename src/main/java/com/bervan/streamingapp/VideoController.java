@@ -92,6 +92,7 @@ public class VideoController {
             }
             return ResponseEntity.notFound().build();
         } catch (IOException e) {
+            logger.error("Error! ", e);
             return ResponseEntity.badRequest().build();
         }
     }
