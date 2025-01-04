@@ -133,13 +133,15 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
             getElement().executeJs(
                     " let isKeyDown = false; " +
+                            " document.addEventListener('keyup', function() {" +
+                            "    isKeyDown = false;" +
+                            " });                    " +
+                            "                        " +
                             " document.addEventListener('keydown', function(event) {" +
-                            "        if (isKeyDown) return;  " +
-                            "        isKeyDown = true;  " +
-                            "        setTimeout(() => {  " +
-                            "            isKeyDown = false; " +
-                            "        }, 333); " +
-                            "  if (event.key === 'b') {" +
+                            "  if (isKeyDown) return; " +
+                            "  isKeyDown = true;" +
+                            "                   " +
+                            " if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "  } else if (event.key === 'Spacebar' || event.key === ' ') {" +
                             toggleStartStop() +
