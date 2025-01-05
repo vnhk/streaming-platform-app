@@ -133,7 +133,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             );
             getElement().executeJs(
                     "var videoPlayer = document.getElementById('videoPlayer');" +
-                            "if (videoPlayer) {" +
+                            " videoPlayer.tabIndex = -1; " +
+                            " if (videoPlayer) {" +
                             "    let lastSentTime = 0;" +
                             "    setInterval(() => {" +
                             "        if (!isNaN(videoPlayer.currentTime) && Math.abs(videoPlayer.currentTime - lastSentTime) >= 5) {" +
