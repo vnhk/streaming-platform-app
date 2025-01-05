@@ -1,8 +1,11 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.common.service.AuthService;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
+import com.bervan.streamingapp.WatchDetails;
+import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
@@ -106,24 +109,39 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "</div>"
             );
 
+            add(videoContainer);
+            WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(AuthService.getLoggedUserId().toString(), videoId);
 
             getElement().executeJs(
-                    " var video = document.getElementById('videoPlayer');" +
-                            "  document.addEventListener('keydown', function(event) {" +
-                            " event.preventDefault();    " +
-                            " console.log(event);       " +
-                            " if (event.key === 'b') {" +
+                    "    var videoPlayer = document.getElementById('videoPlayer');" +
+                            "        videoPlayer.currentTime = $0;" +
+                            "        document.addEventListener('keydown', function(event) {" +
+                            "            event.preventDefault();" +
+                            "            console.log(event);" +
+                            "            if (event.key === 'b') {" +
                             toggleSubtitles() +
-                            "  } else if (event.key === 'Spacebar' || event.key === ' ') {" +
+                            "            } else if (event.key === 'Spacebar' || event.key === ' ') {" +
                             toggleStartStop() +
-                            "  } else if (event.key === 'ArrowRight') {" +
+                            "            } else if (event.key === 'ArrowRight') {" +
                             plusTimeVideo() +
-                            "  } else if (event.key === 'ArrowLeft') {" +
+                            "            } else if (event.key === 'ArrowLeft') {" +
                             minusTimeVideo() +
-                            "  } else if (event.key === 'f') {" +
+                            "            } else if (event.key === 'f') {" +
                             toggleFullscreen() +
-                            "  }" +
-                            "});"
+                            "            }" +
+                            "        });", watchDetails.getCurrentVideoTime()
+            );
+            getElement().executeJs(
+                    "var videoPlayer = document.getElementById('videoPlayer');" +
+                            "if (videoPlayer) {" +
+                            "    let lastSentTime = 0;" +
+                            "    setInterval(() => {" +
+                            "        if (!isNaN(videoPlayer.currentTime) && Math.abs(videoPlayer.currentTime - lastSentTime) >= 5) {" +
+                            "            lastSentTime = videoPlayer.currentTime;" +
+                            "            $0.$server.saveWatchProgress($1, videoPlayer.currentTime);" +
+                            "        }" +
+                            "    }, 10000);" +
+                            "}", getElement(), videoId
             );
         } catch (Exception e) {
             logger.error("Could not load video!", e);
@@ -133,30 +151,30 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     private String toggleFullscreen() {
         return "   " +
-                "  if (!video) return; " +
+                "  if (!videoPlayer) return; " +
                 " if(document.fullscreenElement === video) {" +
                 "   document.exitFullscreen(); " +
                 " } else {" +
-                "   if (video.requestFullscreen) { " +
-                "       video.requestFullscreen(); " +
-                "   } else if (video.webkitRequestFullscreen) { /* Safari */ " +
-                "        video.webkitRequestFullscreen(); " +
-                "   } else if ( video.msRequestFullscreen) { /* IE11 */ " +
-                "        video.msRequestFullscreen(); " +
+                "   if (videoPlayer.requestFullscreen) { " +
+                "       videoPlayer.requestFullscreen(); " +
+                "   } else if (videoPlayer.webkitRequestFullscreen) { /* Safari */ " +
+                "        videoPlayer.webkitRequestFullscreen(); " +
+                "   } else if ( videoPlayer.msRequestFullscreen) { /* IE11 */ " +
+                "        videoPlayer.msRequestFullscreen(); " +
                 "   } " +
                 " } ";
     }
 
     private String plusTimeVideo() {
         return
-                "  if (!video) return; " +
-                        "  video.currentTime += 5; ";
+                "  if (!videoPlayer) return; " +
+                        "  videoPlayer.currentTime += 5; ";
     }
 
     private String minusTimeVideo() {
         return
-                "  if (!video) return; " +
-                        "  video.currentTime -= 5; ";
+                "  if (!videoPlayer) return; " +
+                        "  videoPlayer.currentTime -= 5; ";
     }
 
     private String toggleStartStop() {
@@ -168,14 +186,20 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                         "    }";
     }
 
-    private static String toggleSubtitles() {
+    private String toggleSubtitles() {
         return
-                "   if(video.textTracks[0].mode == 'hidden') { " +
-                        "          video.textTracks[0].mode = 'showing'; " +
-                        "          video.textTracks[1].mode = 'hidden'; " +
+                "   if(videoPlayer.textTracks[0].mode == 'hidden') { " +
+                        "          videoPlayer.textTracks[0].mode = 'showing'; " +
+                        "          videoPlayer.textTracks[1].mode = 'hidden'; " +
                         "   } else { " +
-                        "          video.textTracks[0].mode = 'hidden'; " +
-                        "          video.textTracks[1].mode = 'showing'; " +
+                        "          videoPlayer.textTracks[0].mode = 'hidden'; " +
+                        "          videoPlayer.textTracks[1].mode = 'showing'; " +
                         "   } ";
+    }
+
+    @ClientCallable
+    public void saveWatchProgress(String videoId, double lastWatchedTime) {
+        WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(AuthService.getLoggedUserId().toString(), videoId);
+        videoManager.saveWatchProgress(watchDetails, lastWatchedTime);
     }
 }

@@ -24,11 +24,14 @@ public class VideoManager {
     @Value("${streaming-platform.file-storage-relative-path}")
     public String appFolder;
 
+    private final WatchDetailsRepository watchDetailsRepository;
+
     private final List<String> supportedExtensions = Arrays.asList("mp4");
 
     private final SearchService searchService;
 
-    public VideoManager(SearchService searchService) {
+    public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService) {
+        this.watchDetailsRepository = watchDetailsRepository;
         this.searchService = searchService;
     }
 
@@ -172,5 +175,33 @@ public class VideoManager {
         vttContent = vttContent.replaceAll("\\d+\\n", "");
 
         return vttContent;
+    }
+
+    public WatchDetails getOrCreateWatchDetails(String userId, String videoId) {
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.addCriterion("G1", WatchDetails.class, "userId",
+                SearchOperation.EQUALS_OPERATION, userId);
+        searchRequest.addCriterion("G1", WatchDetails.class, "videoId",
+                SearchOperation.EQUALS_OPERATION, videoId);
+
+        SearchQueryOption options = new SearchQueryOption(WatchDetails.class);
+
+        SearchResponse<WatchDetails> res = searchService.search(searchRequest, options);
+        WatchDetails watchDetails;
+        if (res.getResultList().size() != 0) {
+            watchDetails = res.getResultList().get(0);
+        } else {
+            watchDetails = new WatchDetails();
+            watchDetails.setVideoId(UUID.fromString(videoId));
+            watchDetails.setUserId(UUID.fromString(userId));
+            watchDetails.setCurrentVideoTime(0);
+            return watchDetailsRepository.save(watchDetails);
+        }
+        return watchDetails;
+    }
+
+    public void saveWatchProgress(WatchDetails watchDetails, double lastWatchedTime) {
+        watchDetails.setCurrentVideoTime(lastWatchedTime);
+        watchDetailsRepository.save(watchDetails);
     }
 }
