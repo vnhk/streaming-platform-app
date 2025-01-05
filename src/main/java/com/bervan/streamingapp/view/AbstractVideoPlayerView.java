@@ -114,6 +114,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
             getElement().executeJs(
                     "    var videoPlayer = document.getElementById('videoPlayer');" +
+                            "        videoPlayer.onfocus = function(){} " +
                             "        videoPlayer.currentTime = $0;" +
                             "        document.addEventListener('keydown', function(event) {" +
                             "            event.preventDefault();" +
