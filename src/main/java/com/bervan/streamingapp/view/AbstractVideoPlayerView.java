@@ -6,8 +6,6 @@ import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.NativeButton;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -61,19 +59,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             // Create a Div to contain the video player
             Div videoContainer = new Div();
 
-            // Add custom controls if needed
-            NativeButton playButton = new NativeButton("Play", e -> {
-                getElement().executeJs("document.getElementById('videoPlayer').play()");
-            });
-
-            playButton.addClassName("custom-button");
-
-            NativeButton pauseButton = new NativeButton("Pause", e -> {
-                getElement().executeJs("document.getElementById('videoPlayer').pause()");
-            });
-
-            pauseButton.addClassName("custom-button");
-
             // Add CSS styles directly into the page
             getElement().executeJs(
                     "const style = document.createElement('style');" +
@@ -121,26 +106,12 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "</div>"
             );
 
-            NativeButton toggleSubtitlesButton = new NativeButton("Toggle Subtitles", e -> {
-                getElement().executeJs(
-                        toggleSubtitles()
-                );
-            });
-            toggleSubtitlesButton.addClassName("custom-button");
-
-            add(videoContainer);
-            add(new HorizontalLayout(playButton, pauseButton, toggleSubtitlesButton));
 
             getElement().executeJs(
-                    " let isKeyDown = false; " +
-                            " document.addEventListener('keyup', function() {" +
-                            "    isKeyDown = false;" +
-                            " });                    " +
-                            "                        " +
-                            " document.addEventListener('keydown', function(event) {" +
-                            "  if (isKeyDown) return; " +
-                            "  isKeyDown = true;" +
-                            "                   " +
+                    " var video = document.getElementById('videoPlayer');" +
+                            "  document.addEventListener('keydown', function(event) {" +
+                            " event.preventDefault();    " +
+                            " console.log(event);       " +
                             " if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "  } else if (event.key === 'Spacebar' || event.key === ' ') {" +
@@ -161,7 +132,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
     }
 
     private String toggleFullscreen() {
-        return "  var video = document.getElementById('videoPlayer'); " +
+        return "   " +
                 "  if (!video) return; " +
                 " if(document.fullscreenElement === video) {" +
                 "   document.exitFullscreen(); " +
@@ -177,34 +148,34 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
     }
 
     private String plusTimeVideo() {
-        return "  var video = document.getElementById('videoPlayer'); " +
+        return
                 "  if (!video) return; " +
-                "  video.currentTime += 5; ";
+                        "  video.currentTime += 5; ";
     }
 
     private String minusTimeVideo() {
-        return "  var video = document.getElementById('videoPlayer'); " +
+        return
                 "  if (!video) return; " +
-                "  video.currentTime -= 5; ";
+                        "  video.currentTime -= 5; ";
     }
 
     private String toggleStartStop() {
-        return "  var videoPlayer = document.getElementById('videoPlayer'); " +
+        return
                 "    if (videoPlayer.paused) { " +
-                "        videoPlayer.play(); " +
-                "    } else { " +
-                "        videoPlayer.pause(); " +
-                "    }";
+                        "        videoPlayer.play(); " +
+                        "    } else { " +
+                        "        videoPlayer.pause(); " +
+                        "    }";
     }
 
     private static String toggleSubtitles() {
-        return "    var video = document.getElementById('videoPlayer'); " +
+        return
                 "   if(video.textTracks[0].mode == 'hidden') { " +
-                "          video.textTracks[0].mode = 'showing'; " +
-                "          video.textTracks[1].mode = 'hidden'; " +
-                "   } else { " +
-                "          video.textTracks[0].mode = 'hidden'; " +
-                "          video.textTracks[1].mode = 'showing'; " +
-                "   } ";
+                        "          video.textTracks[0].mode = 'showing'; " +
+                        "          video.textTracks[1].mode = 'hidden'; " +
+                        "   } else { " +
+                        "          video.textTracks[0].mode = 'hidden'; " +
+                        "          video.textTracks[1].mode = 'showing'; " +
+                        "   } ";
     }
 }
