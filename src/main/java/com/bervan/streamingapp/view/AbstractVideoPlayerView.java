@@ -153,7 +153,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
     private String toggleFullscreen() {
         return "   " +
                 "  if (!videoPlayer) return; " +
-                " if(document.fullscreenElement === video) {" +
+                " if(document.fullscreenElement === videoPlayer) {" +
                 "   document.exitFullscreen(); " +
                 " } else {" +
                 "   if (videoPlayer.requestFullscreen) { " +
