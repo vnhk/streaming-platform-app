@@ -106,6 +106,10 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
                             "    <track id='trackPL' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/pl' srclang='pl' label='Polish'>" +
                             "  </video>" +
+                            "  <div style='margin-top: 10px; display: flex; flex-direction: column; align-items: center;'>" +
+                            "    <label for='subtitleDelayInput'>Subtitle Delay (seconds):</label>" +
+                            "    <input id='subtitleDelayInput' type='number' value='0' step='0.5' style='width: 100px; text-align: center;'/>" +
+                            "  </div>" +
                             "</div>"
             );
 
@@ -144,6 +148,28 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "        }" +
                             "    }, 10000);" +
                             "}", getElement(), videoId
+            );
+
+            getElement().executeJs(
+                    "let subtitleDelay = 0;" +
+                            " function adjustSubtitleTiming(track, delay) {" +
+                            "    if (!track) return;" +
+                            "    for (let i = 0; i < track.cues.length; i++) {" +
+                            "        const cue = track.cues[i];" +
+                            "        cue.startTime += delay;" +
+                            "        cue.endTime += delay;" +
+                            "    }" +
+                            "}" +
+                            "document.getElementById('subtitleDelayInput').addEventListener('input', function(event) {" +
+                            "    const videoPlayer = document.getElementById('videoPlayer');" +
+                            "    const textTracks = videoPlayer.textTracks;" +
+                            "    const newDelay = parseFloat(event.target.value) || 0;" +
+                            "    const delayDifference = newDelay - subtitleDelay;" +
+                            "    subtitleDelay = newDelay;" +
+                            "    for (let i = 0; i < textTracks.length; i++) {" +
+                            "        adjustSubtitleTiming(textTracks[i], delayDifference);" +
+                            "    }" +
+                            "});"
             );
         } catch (Exception e) {
             logger.error("Could not load video!", e);
