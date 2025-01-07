@@ -204,4 +204,11 @@ public class VideoManager {
         watchDetails.setCurrentVideoTime(lastWatchedTime);
         watchDetailsRepository.save(watchDetails);
     }
+
+    public void saveSubtitleDelays(WatchDetails watchDetails, double enDelay, double plDelay) {
+        watchDetails.setSubtitleDelayEN(enDelay);
+        watchDetails.setSubtitleDelayPL(plDelay);
+
+        watchDetailsRepository.save(watchDetails);
+    }
 }

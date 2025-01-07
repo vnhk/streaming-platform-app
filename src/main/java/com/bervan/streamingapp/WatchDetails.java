@@ -21,6 +21,8 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
     private LocalDateTime creationDate;
 
     private boolean deleted = false;
+    private double subtitleDelayEN;
+    private double subtitleDelayPL;
 
     public UUID getVideoId() {
         return videoId;
@@ -88,5 +90,21 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
 
     public void setCurrentVideoTime(double currentVideoTime) {
         this.currentVideoTime = currentVideoTime;
+    }
+
+    public void setSubtitleDelayEN(double subtitleDelayEN) {
+        this.subtitleDelayEN = subtitleDelayEN;
+    }
+
+    public double getSubtitleDelayEN() {
+        return subtitleDelayEN;
+    }
+
+    public void setSubtitleDelayPL(double subtitleDelayPL) {
+        this.subtitleDelayPL = subtitleDelayPL;
+    }
+
+    public double getSubtitleDelayPL() {
+        return subtitleDelayPL;
     }
 }
