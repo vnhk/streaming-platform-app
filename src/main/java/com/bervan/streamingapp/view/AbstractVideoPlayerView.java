@@ -100,7 +100,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             // HTML Video Player
             videoContainer.getElement().setProperty(
                     "innerHTML",
-                    "<div id='videoContainer'>" +
+                    "        <div id='videoContainer'>" +
                             "  <video id='videoPlayer' controls playsinline>" +
                             "    <source src='" + videoSrc + "' type='video/mp4'>" +
                             "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
@@ -117,9 +117,9 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(AuthService.getLoggedUserId().toString(), videoId);
 
             getElement().executeJs(
-                    "    var videoPlayer = document.getElementById('videoPlayer');" +
-                            "        videoPlayer.onfocus = function(){} " +
-                            "        videoPlayer.currentTime = $0;" +
+                    "      let videoPlayer = document.getElementById('videoPlayer');" +
+                            "        videoPlayer.onfocus = function(){}; " +
+                            "        videoPlayer.currentTime = $2;" +
                             "        document.addEventListener('keydown', function(event) {" +
                             "            event.preventDefault();" +
                             "            console.log(event);" +
@@ -134,11 +134,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "            } else if (event.key === 'f') {" +
                             toggleFullscreen() +
                             "            }" +
-                            "        });", watchDetails.getCurrentVideoTime()
-            );
-            getElement().executeJs(
-                    "var videoPlayer = document.getElementById('videoPlayer');" +
-                            " videoPlayer.tabIndex = -1; " +
+                            "        });" +
                             " if (videoPlayer) {" +
                             "    let lastSentTime = 0;" +
                             "    setInterval(() => {" +
@@ -147,11 +143,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "            $0.$server.saveWatchProgress($1, videoPlayer.currentTime);" +
                             "        }" +
                             "    }, 10000);" +
-                            "}", getElement(), videoId
-            );
-
-            getElement().executeJs(
-                    "let subtitleDelay = 0;" +
+                            "} " +
+                            " let subtitleDelay = 0;" +
                             " function adjustSubtitleTiming(track, delay) {" +
                             "    if (!track) return;" +
                             "    for (let i = 0; i < track.cues.length; i++) {" +
@@ -161,7 +154,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    }" +
                             "}" +
                             "document.getElementById('subtitleDelayInput').addEventListener('input', function(event) {" +
-                            "    const videoPlayer = document.getElementById('videoPlayer');" +
                             "    const textTracks = videoPlayer.textTracks;" +
                             "    const newDelay = parseFloat(event.target.value) || 0;" +
                             "    const delayDifference = newDelay - subtitleDelay;" +
@@ -169,7 +161,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    for (let i = 0; i < textTracks.length; i++) {" +
                             "        adjustSubtitleTiming(textTracks[i], delayDifference);" +
                             "    }" +
-                            "});"
+                            "});", getElement(), videoId, watchDetails.getCurrentVideoTime()
             );
         } catch (Exception e) {
             logger.error("Could not load video!", e);
@@ -227,6 +219,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     @ClientCallable
     public void saveWatchProgress(String videoId, double lastWatchedTime) {
+        logger.info("videoId + lastWatchedTime: " + videoId + "=" + lastWatchedTime);
         WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(AuthService.getLoggedUserId().toString(), videoId);
         videoManager.saveWatchProgress(watchDetails, lastWatchedTime);
     }
