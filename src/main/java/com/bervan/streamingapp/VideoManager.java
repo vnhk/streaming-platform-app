@@ -167,9 +167,13 @@ public class VideoManager {
 
         String content;
         try {
-            content = Files.readString(inputPath, StandardCharsets.UTF_8);
+            content = Files.readString(inputPath);
         } catch (Exception e) {
-            content = Files.readString(inputPath, StandardCharsets.ISO_8859_1);
+            try {
+                content = Files.readString(inputPath, StandardCharsets.UTF_8);
+            } catch (Exception e1) {
+                content = Files.readString(inputPath, StandardCharsets.ISO_8859_1);
+            }
         }
         String vttContent = "WEBVTT\n\n" + content.replace(",", ".");
         vttContent = vttContent.replaceAll("\\d+\\n", "");
