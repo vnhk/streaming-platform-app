@@ -131,7 +131,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "document.getElementById('subtitleDelayInputPL').value = $4;" +
 
                             "document.addEventListener('keydown', function(event) {" +
-                            "    event.preventDefault();" +
+                            "     " +
                             "    if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "    } else if (event.key === ' ' || event.key === 'Spacebar') {" +
@@ -142,7 +142,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             minusTimeVideo() +
                             "    } else if (event.key === 'f') {" +
                             toggleFullscreen() +
-                            "    }" +
+                            "    } else {return;}" +
+                            " event.preventDefault(); " +
                             "});" +
 
                             "if (videoPlayer) {" +
