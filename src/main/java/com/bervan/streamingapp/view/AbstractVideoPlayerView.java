@@ -104,7 +104,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
             videoContainer.getElement().setProperty(
                     "innerHTML",
                     "<div id='videoContainer'>" +
-                            "  <video id='videoPlayer' controls playsinline>" +
+                            "  <video id='videoPlayer' controls playsinline preload='auto'>" +
                             "    <source src='" + videoSrc + "' type='video/mp4'>" +
                             "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
                             "    <track id='trackPL' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/pl' srclang='pl' label='Polish'>" +
