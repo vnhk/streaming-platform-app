@@ -131,8 +131,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         for (Metadata video : videos) {
             try {
                 VerticalLayout tile = getTile();
-//                String imageSrc = "/storage/videos/poster/" + video.getId();
-                String imageSrc = null;
+                String imageSrc = "/storage/videos/poster/" + video.getId();
                 Image image = getImage(video.getFilename(), imageSrc, defaultPoster);
                 H4 title = getTitle(video.getFilename());
 
@@ -159,17 +158,22 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
     }
 
     private Image getImage(String text, String imageSrc, List<Metadata> defaultPoster) {
-        if (imageSrc == null || imageSrc.isBlank()) {
-            if (defaultPoster != null && defaultPoster.size() > 0) {
-                imageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
-            } else {
-                imageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
-            }
+        String fallbackImageSrc;
+        if (defaultPoster != null && defaultPoster.size() > 0) {
+            fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
+        } else {
+            fallbackImageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
+
         }
         Image image = new Image(imageSrc, text);
         image.setWidth("100%");
         image.setHeight("70%");
         image.getStyle().set("object-fit", "cover");
+
+        image.getElement().executeJs(
+                "this.onerror = function() { this.onerror = null; this.src = $0; }", fallbackImageSrc
+        );
+
         return image;
     }
 
