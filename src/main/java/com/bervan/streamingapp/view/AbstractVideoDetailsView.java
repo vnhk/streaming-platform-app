@@ -52,6 +52,10 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
             image.setWidth("200px");
             image.setHeight("70%");
             image.getStyle().set("object-fit", "cover");
+            String fallbackImageSrc = "images/no_video_image.png";
+            image.getElement().executeJs(
+                    "this.onerror = function() { this.onerror = null; this.src = $0; }", fallbackImageSrc
+            );
 
             H3 title = new H3(rootFolder.getFilename());
             Div details = buildDetails(rootFolder);

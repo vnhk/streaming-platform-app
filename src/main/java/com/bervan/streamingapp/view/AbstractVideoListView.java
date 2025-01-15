@@ -100,13 +100,16 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
     }
 
     private Image getImage(String text, String imageSrc) {
-        if (imageSrc == null || imageSrc.isBlank()) {
-            imageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
-        }
+        String fallbackImageSrc = "images/no_video_image.png";
         Image image = new Image(imageSrc, text);
         image.setWidth("100%");
         image.setHeight("70%");
         image.getStyle().set("object-fit", "cover");
+
+        image.getElement().executeJs(
+                "this.onerror = function() { this.onerror = null; this.src = $0; }", fallbackImageSrc
+        );
+
         return image;
     }
 
