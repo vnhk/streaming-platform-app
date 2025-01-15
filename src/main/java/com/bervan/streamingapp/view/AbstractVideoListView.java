@@ -35,6 +35,7 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
     private VerticalLayout createScrollableSection(String title, HorizontalLayout contentLayout) {
         VerticalLayout section = new VerticalLayout();
         section.add(new H3(title));
+        section.setWidth("95vw");
 
         HorizontalLayout container = new HorizontalLayout();
         container.setWidthFull();
