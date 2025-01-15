@@ -47,10 +47,36 @@ public class VideoController {
                 return ResponseEntity.notFound().build();
             }
 
-            return ResponseEntity.ok()
-                    .contentType(MediaTypeFactory.getMediaType(resource)
-                            .orElse(MediaType.IMAGE_PNG))
-                    .body(resource);
+            return ResponseEntity.ok().contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.IMAGE_PNG)).body(resource);
+        } catch (Exception e) {
+            logger.error(e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @GetMapping("/poster/direct/{metadataId}")
+    public ResponseEntity<Resource> servePosterDirectly(@PathVariable String metadataId) {
+        try {
+            List<Metadata> metadata = videoManager.loadById(metadataId);
+
+            if (metadata.size() != 1) {
+                logger.error("Could not find file based on provided id!");
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            Metadata m = metadata.get(0);
+            if (!(m.getFilename().endsWith(".jpg") || m.getFilename().endsWith(".png"))) {
+                logger.error("File is not jpg or png based on provided id!");
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            Path file = Path.of(videoManager.getSrc(m));
+            Resource resource = new UrlResource(file.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            return ResponseEntity.ok().contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.IMAGE_PNG)).body(resource);
         } catch (Exception e) {
             logger.error(e);
             throw new RuntimeException(e);

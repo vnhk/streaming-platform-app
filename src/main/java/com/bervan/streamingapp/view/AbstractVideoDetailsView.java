@@ -3,12 +3,15 @@ package com.bervan.streamingapp.view;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H3;
-import com.vaadin.flow.component.html.Image;
+import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,24 +21,10 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
     private final BervanLogger logger;
     private final VideoManager videoManager;
 
-    private final Div treeView;
-    private final Div content;
-
     public AbstractVideoDetailsView(BervanLogger logger, VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME);
         this.logger = logger;
         this.videoManager = videoManager;
-
-        // Initialize the Tree View container
-        treeView = new Div();
-        treeView.addClassName("tree-view");
-
-        // Add Tree View to the UI
-        content = new Div();
-        content.setSizeFull();
-        content.addClassName("content-container");
-
-        add(content);
     }
 
     @Override
@@ -65,80 +54,138 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
             image.getStyle().set("object-fit", "cover");
 
             H3 title = new H3(rootFolder.getFilename());
-            content.add(image, title, treeView);
-
-            // Generate HTML for the entire tree
-            String treeHtml = generateTreeHtml(rootFolder);
-
-            // Add the generated tree HTML to the container
-            treeView.getElement().setProperty("innerHTML", treeHtml);
-
-            // Attach JavaScript for dynamic tree handling
-            attachScript();
-
+            Div details = buildDetails(rootFolder);
+            add(image, title, details);
         } catch (Exception e) {
             logger.error("Could not load details!", e);
             showErrorNotification("Could not load details!");
         }
     }
 
-    private String generateTreeHtml(Metadata folder) {
-        StringBuilder htmlBuilder = new StringBuilder();
+    private Div buildDetails(Metadata root) {
+        Div result = new Div();
 
-        htmlBuilder.append("<ul>");
-        appendFolderContent(htmlBuilder, folder);
-        htmlBuilder.append("</ul>");
-
-        return htmlBuilder.toString();
-    }
-
-    private void appendFolderContent(StringBuilder htmlBuilder, Metadata folder) {
-        htmlBuilder.append("<li class='folder-item'>");
-        htmlBuilder.append("<span class='folder-toggle option-button'>")
-                .append(folder.getFilename()).append("</span>");
-
-        // Load directory content
-        Map<String, List<Metadata>> content = videoManager.loadVideoDirectoryContent(folder);
-        List<Metadata> subfoldersAndFiles = content.values().stream()
-                .flatMap(List::stream)
-                .toList();
-
-        if (!subfoldersAndFiles.isEmpty()) {
-            htmlBuilder.append("<ul class='nested'>");
-            for (Metadata item : subfoldersAndFiles) {
-                if (item.isDirectory()) {
-                    appendFolderContent(htmlBuilder, item);
-                } else if (videoManager.getSupportedExtensions().contains(item.getExtension())) {
-                    htmlBuilder.append("<li class='file-item'>");
-                    htmlBuilder.append("<button class='file-button' onclick='navigateToVideo(\"")
-                            .append(item.getId()).append("\")'>")
-                            .append(item.getFilename())
-                            .append("</button>");
-                    htmlBuilder.append("</li>");
-                }
+        Map<String, List<Metadata>> rootContent = videoManager.loadVideoDirectoryContent(root);
+        List<Metadata> defaultPoster = rootContent.get("POSTER");
+        List<Metadata> directories = rootContent.get("DIRECTORY");
+        for (Metadata directory : directories) {
+            if (directory.getFilename().startsWith("Season")) {
+                result.add(createScrollableSection(directory.getFilename(), seasonVideosLayout(directory, defaultPoster)));
+                result.add(new Hr());
             }
-            htmlBuilder.append("</ul>");
         }
 
-        htmlBuilder.append("</li>");
+        List<Metadata> videos = rootContent.get("VIDEO");
+        if (videos != null && videos.size() > 0) {
+            result.add(createScrollableSection("Video:", allVideos(videos, defaultPoster)));
+        }
+
+        return result;
     }
 
-    private void attachScript() {
-        getElement().executeJs(
-                """                    
-                        document.querySelectorAll('.folder-toggle').forEach(folder => {
-                            folder.addEventListener('click', function () {
-                                const nested = this.nextElementSibling;
-                                 if (nested)
-                                    nested.classList.toggle('active');
-                            });
-                        });
-                                                
-                        // Navigate to video
-                        window.navigateToVideo = function(videoId) {
-                            window.location.href = '/streaming-platform/video-player/' + videoId;
-                        };
-                        """
-        );
+    private VerticalLayout createScrollableSection(String title, HorizontalLayout contentLayout) {
+        VerticalLayout section = new VerticalLayout();
+        section.add(new H3(title));
+
+        HorizontalLayout container = new HorizontalLayout();
+        container.setWidthFull();
+        container.setAlignItems(Alignment.CENTER);
+
+        Button leftArrow = new Button("<");
+        leftArrow.addClassName("option-button");
+        leftArrow.addClickListener(event -> contentLayout.getElement().executeJs("this.scrollBy({left: -345, behavior: 'smooth'})"));
+
+        Button rightArrow = new Button(">");
+        rightArrow.addClassName("option-button");
+        rightArrow.addClickListener(event -> contentLayout.getElement().executeJs("this.scrollBy({left: 345, behavior: 'smooth'})"));
+
+        container.add(leftArrow, contentLayout, rightArrow);
+        container.setFlexGrow(1, contentLayout);
+
+        section.add(container);
+        return section;
+    }
+
+    private HorizontalLayout seasonVideosLayout(Metadata seasonDirectory, List<Metadata> defaultPoster) {
+        Map<String, List<Metadata>> stringListMap = videoManager.loadVideoDirectoryContent(seasonDirectory);
+        List<Metadata> allVideosInSeason = stringListMap.entrySet().stream().filter(e -> e.getKey().equals("DIRECTORY"))
+                .map(Map.Entry::getValue).flatMap(Collection::stream).filter(e -> e.getFilename().startsWith("Ep"))
+                .map(e -> videoManager.loadVideoDirectoryContent(e).get("VIDEO"))
+                .flatMap(Collection::stream)
+                .toList();
+
+        return createVideoLayout(allVideosInSeason, ROUTE_NAME + "/video-player/", defaultPoster);
+    }
+
+    private HorizontalLayout allVideos(List<Metadata> videos, List<Metadata> defaultPoster) {
+        return createVideoLayout(videos, ROUTE_NAME + "/video-player/", defaultPoster);
+    }
+
+    private HorizontalLayout createVideoLayout(List<Metadata> videos, String route, List<Metadata> defaultPoster) {
+        HorizontalLayout scrollingLayout = new HorizontalLayout();
+        scrollingLayout.getStyle()
+                .set("overflow-x", "hidden")
+                .set("white-space", "nowrap")
+                .set("padding", "10px");
+
+        for (Metadata video : videos) {
+            try {
+                VerticalLayout tile = getTile();
+//                String imageSrc = "/storage/videos/poster/" + video.getId();
+                String imageSrc = null;
+                Image image = getImage(video.getFilename(), imageSrc, defaultPoster);
+                H4 title = getTitle(video.getFilename());
+
+                tile.add(image, title);
+                tile.addClickListener(click ->
+                        UI.getCurrent().navigate(route + video.getId())
+                );
+                scrollingLayout.add(tile);
+            } catch (Exception e) {
+                logger.error("Unable to load video!", e);
+                showErrorNotification("Unable to load video!");
+            }
+        }
+
+        return scrollingLayout;
+    }
+
+    private H4 getTitle(String value) {
+        H4 title = new H4(value);
+        title.getStyle()
+                .set("text-align", "center")
+                .set("margin-top", "10px");
+        return title;
+    }
+
+    private Image getImage(String text, String imageSrc, List<Metadata> defaultPoster) {
+        if (imageSrc == null || imageSrc.isBlank()) {
+            if (defaultPoster != null && defaultPoster.size() > 0) {
+                imageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
+            } else {
+                imageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
+            }
+        }
+        Image image = new Image(imageSrc, text);
+        image.setWidth("100%");
+        image.setHeight("70%");
+        image.getStyle().set("object-fit", "cover");
+        return image;
+    }
+
+    private VerticalLayout getTile() {
+        VerticalLayout tile = new VerticalLayout();
+        tile.addClassName("movie-tile");
+        tile.getStyle()
+                .set("margin", "10px")
+                .set("cursor", "pointer")
+                .set("display", "inline-block")
+                .set("min-width", "320px")
+                .set("width", "320px")
+                .set("height", "440px")
+                .set("border-radius", "8px")
+                .set("overflow", "hidden")
+                .set("box-shadow", "0px 4px 10px rgba(0, 0, 0, 0.1)");
+        return tile;
     }
 }
