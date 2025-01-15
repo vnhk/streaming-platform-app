@@ -68,10 +68,12 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         Map<String, List<Metadata>> rootContent = videoManager.loadVideoDirectoryContent(root);
         List<Metadata> defaultPoster = rootContent.get("POSTER");
         List<Metadata> directories = rootContent.get("DIRECTORY");
-        for (Metadata directory : directories) {
-            if (directory.getFilename().startsWith("Season")) {
-                result.add(createScrollableSection(directory.getFilename(), seasonVideosLayout(directory, defaultPoster)));
-                result.add(new Hr());
+        if (directories != null) {
+            for (Metadata directory : directories) {
+                if (directory.getFilename().startsWith("Season")) {
+                    result.add(createScrollableSection(directory.getFilename(), seasonVideosLayout(directory, defaultPoster)));
+                    result.add(new Hr());
+                }
             }
         }
 
@@ -162,8 +164,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         if (defaultPoster != null && defaultPoster.size() > 0) {
             fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
         } else {
-            fallbackImageSrc = "https://thinkstrategic.com/wp-content/uploads/2022/09/How-Video-Production-Can-Be-a-Versatile-Marketing-Tool.png";
-
+            fallbackImageSrc = "images/no_video_image.png";
         }
         Image image = new Image(imageSrc, text);
         image.setWidth("100%");
