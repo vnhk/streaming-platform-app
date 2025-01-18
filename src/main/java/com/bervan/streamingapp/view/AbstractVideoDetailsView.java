@@ -121,14 +121,14 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .flatMap(Collection::stream)
                 .toList();
 
-        return createVideoLayout(allVideosInSeason, ROUTE_NAME + "/video-player/", defaultPoster);
+        return createVideoLayout(allVideosInSeason, defaultPoster);
     }
 
     private HorizontalLayout allVideos(List<Metadata> videos, List<Metadata> defaultPoster) {
-        return createVideoLayout(videos, ROUTE_NAME + "/video-player/", defaultPoster);
+        return createVideoLayout(videos, defaultPoster);
     }
 
-    private HorizontalLayout createVideoLayout(List<Metadata> videos, String route, List<Metadata> defaultPoster) {
+    private HorizontalLayout createVideoLayout(List<Metadata> videos, List<Metadata> defaultPoster) {
         HorizontalLayout scrollingLayout = new HorizontalLayout();
         scrollingLayout.getStyle()
                 .set("overflow-x", "hidden")
@@ -144,7 +144,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
 
                 tile.add(image, title);
                 tile.addClickListener(click ->
-                        UI.getCurrent().navigate(route + video.getId())
+                        UI.getCurrent().navigate("/streaming-platform/video-player/" + video.getId())
                 );
                 scrollingLayout.add(tile);
             } catch (Exception e) {
