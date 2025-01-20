@@ -169,7 +169,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    } else if (event.key === 'f') {" +
                             toggleFullscreen() +
                             "    } else {return;}" +
-                            " event.preventDefault(); " +
                             "});" +
 
                             "if (videoPlayer) {" +
