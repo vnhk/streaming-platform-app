@@ -9,10 +9,13 @@ import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public abstract class AbstractVideoPlayerView extends AbstractStreamingPage implements HasUrlParameter<String> {
@@ -51,6 +54,29 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                 );
                 add(detailsButton);
             }
+
+            Optional<Metadata> prevVideo = videoManager.getPrevVideo(video.get(0));
+            Optional<Metadata> nextVideo = videoManager.getNextVideo(video.get(0));
+
+            if (prevVideo.isPresent()) {
+                Button prevButton = new Button("Previous episode");
+                prevButton.addClassName("option-button");
+                prevButton.addClickListener(click ->
+                        UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + prevVideo.get().getId())
+                );
+                add(prevButton);
+            }
+
+            if (nextVideo.isPresent()) {
+                Button nextButton = new Button("Next episode");
+                nextButton.addClassName("option-button");
+                nextButton.addClickListener(click ->
+                        UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + nextVideo.get().getId())
+                );
+                add(nextButton);
+            }
+
+            add(new Hr(), new H4("Video: " + video.get(0).getFilename()));
 
             setSizeFull();
             setSpacing(false);

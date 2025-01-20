@@ -6,6 +6,8 @@ import com.bervan.common.search.SearchService;
 import com.bervan.common.search.model.SearchOperation;
 import com.bervan.common.search.model.SearchResponse;
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.filestorage.service.FileServiceManager;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class VideoManager {
@@ -29,10 +33,12 @@ public class VideoManager {
     private final List<String> supportedExtensions = Arrays.asList("mp4");
 
     private final SearchService searchService;
+    private final FileServiceManager fileServiceManager;
 
-    public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService) {
+    public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
         this.watchDetailsRepository = watchDetailsRepository;
         this.searchService = searchService;
+        this.fileServiceManager = fileServiceManager;
     }
 
     public List<Metadata> loadVideosMainDirectories() {
@@ -76,6 +82,53 @@ public class VideoManager {
     public String getSrc(Metadata metadata) {
         return pathToFileStorage + File.separator +
                 metadata.getPath() + File.separator + metadata.getFilename();
+    }
+
+
+    public Optional<Metadata> getNextVideo(Metadata videoMetadata) {
+        Optional<Metadata> videoParentFolder = fileServiceManager.getParent(videoMetadata);
+
+        if (videoParentFolder.isEmpty()) {
+            return Optional.empty();
+        }
+        videoMetadata = videoParentFolder.get();
+        String filename = videoMetadata.getFilename();
+
+        String pattern = "(?:Ep(?:isode)?\\s?)(\\d+)";
+        Pattern regex = Pattern.compile(pattern);
+
+        int episodeNumber;
+        Matcher matcher = regex.matcher(filename);
+        if (matcher.find()) {
+            episodeNumber = Integer.parseInt(matcher.group(1)) + 1;
+        } else {
+            return Optional.empty();
+        }
+
+        return loadEpisodeVideo(videoMetadata, episodeNumber);
+    }
+
+    public Optional<Metadata> getPrevVideo(Metadata videoMetadata) {
+        Optional<Metadata> videoParentFolder = fileServiceManager.getParent(videoMetadata);
+
+        if (videoParentFolder.isEmpty()) {
+            return Optional.empty();
+        }
+        videoMetadata = videoParentFolder.get();
+        String filename = videoMetadata.getFilename();
+
+        String pattern = "(?:Ep(?:isode)?\\s?)(\\d+)";
+        Pattern regex = Pattern.compile(pattern);
+
+        int episodeNumber;
+        Matcher matcher = regex.matcher(filename);
+        if (matcher.find()) {
+            episodeNumber = Integer.parseInt(matcher.group(1)) - 1;
+        } else {
+            return Optional.empty();
+        }
+
+        return loadEpisodeVideo(videoMetadata, episodeNumber);
     }
 
     public List<String> getSupportedExtensions() {
@@ -215,4 +268,35 @@ public class VideoManager {
 
         watchDetailsRepository.save(watchDetails);
     }
+
+    @NotNull
+    private Optional<Metadata> loadEpisodeVideo(Metadata metadata, int episodeNumber) {
+        Optional<Metadata> parent = fileServiceManager.getParent(metadata);
+        if (parent.isPresent()) {
+            Metadata parentFolder = parent.get();
+            SearchRequest searchRequest = new SearchRequest();
+            searchRequest.addCriterion("G1", Metadata.class, "path",
+                    SearchOperation.EQUALS_OPERATION, parentFolder.getPath() + File.separator + parentFolder.getFilename());
+            searchRequest.addCriterion("G1", Metadata.class, "filename",
+                    SearchOperation.IN_OPERATION, List.of("Ep" + episodeNumber, "Ep " + episodeNumber, "Episode" + episodeNumber, "Episode " + episodeNumber));
+            searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
+                    SearchOperation.EQUALS_OPERATION, true);
+
+            SearchQueryOption options = new SearchQueryOption(Metadata.class);
+            options.setSortField("filename");
+
+            SearchResponse<Metadata> response = searchService.search(searchRequest, options);
+            if (response.getAllFound() == 1) {
+                List<Metadata> video = loadVideoDirectoryContent(response.getResultList().get(0)).get("VIDEO");
+                if (video.size() == 1) {
+                    return Optional.ofNullable(video.get(0));
+                }
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        return Optional.empty();
+    }
+
 }
