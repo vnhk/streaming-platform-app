@@ -150,14 +150,13 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
             getElement().executeJs(
                     "let videoPlayer = document.getElementById('videoPlayer');" +
-                            "if (videoPlayer) {" +
+                            " if (videoPlayer) {" +
                             "    videoPlayer.currentTime = $2;" +
-                            "}" +
+                            " }" +
                             "document.getElementById('subtitleDelayInputEN').value = $3;" +
                             "document.getElementById('subtitleDelayInputPL').value = $4;" +
 
-                            "document.addEventListener('keydown', function(event) {" +
-                            "     " +
+                            " document.addEventListener('keydown', function(event) {" +
                             "    if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "    } else if (event.key === ' ' || event.key === 'Spacebar') {" +
@@ -169,9 +168,9 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    } else if (event.key === 'f') {" +
                             toggleFullscreen() +
                             "    } else {return;}" +
-                            "});" +
+                            " }); " +
 
-                            "if (videoPlayer) {" +
+                            " if (videoPlayer) {" +
                             "    let lastSentTime = 0;" +
                             "    setInterval(() => {" +
                             "        if (!isNaN(videoPlayer.currentTime) && Math.abs(videoPlayer.currentTime - lastSentTime) >= 5) {" +
@@ -179,21 +178,21 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "            $0.$server.saveWatchProgress($1, videoPlayer.currentTime);" +
                             "        }" +
                             "    }, 10000);" +
-                            "}" +
+                            " } " +
 
-                            "let enDelay = $3;" +
-                            "let plDelay = $4;" +
+                            " let enDelay = $3; " +
+                            " let plDelay = $4; " +
 
-                            "function adjustSubtitleTiming(track, delay) {" +
+                            " function adjustSubtitleTiming(track, delay) {" +
                             "    if (!track || !track.cues) return;" +
                             "    for (let i = 0; i < track.cues.length; i++) {" +
                             "        const cue = track.cues[i];" +
                             "        cue.startTime += delay;" +
                             "        cue.endTime += delay;" +
                             "    }" +
-                            "}" +
+                            " } " +
 
-                            "document.getElementById('subtitleDelayInputEN').addEventListener('input', function(event) {" +
+                            " document.getElementById('subtitleDelayInputEN').addEventListener('input', function(event) {" +
                             "    const textTracks = videoPlayer.textTracks;" +
                             "    const newEn = parseFloat(event.target.value) || 0;" +
                             "    let diffEn = newEn - enDelay;" +
@@ -204,9 +203,9 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "        }" +
                             "    }" +
                             "    $0.$server.saveActualDelay($1, enDelay, plDelay);" +
-                            "});" +
-
-                            "document.getElementById('subtitleDelayInputPL').addEventListener('input', function(event) {" +
+                            " }); "
+                            +
+                            " document.getElementById('subtitleDelayInputPL').addEventListener('input', function(event) {" +
                             "    const textTracks = videoPlayer.textTracks;" +
                             "    const newPl = parseFloat(event.target.value) || 0;" +
                             "    let diffPl = newPl - plDelay;" +
@@ -217,7 +216,22 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "        }" +
                             "    }" +
                             "    $0.$server.saveActualDelay($1, enDelay, plDelay);" +
-                            "});"
+                            " }); "
+                            +
+                            " document.addEventListener('DOMContentLoaded', () => { " +
+                            "    if (videoPlayer) {" +
+                            "        const textTracks = videoPlayer.textTracks; " +
+                            "        for (let i = 0; i < textTracks.length; i++) { " +
+                            "           if (textTracks[i].language === 'pl' || textTracks[i].label.toLowerCase() === 'polish') {" +
+                            "               adjustSubtitleTiming(textTracks[i], plDelay);" +
+                            "           } else if (textTracks[i].language === 'en' || textTracks[i].label.toLowerCase() === 'english') { " +
+                            "               adjustSubtitleTiming(textTracks[i], enDelay);" +
+                            "           }" +
+                            "        }" +
+                            "    } else {" +
+                            "        console.error('Video player element not found.');" +
+                            "    }" +
+                            " }); "
                     ,
                     getElement(),     // $0
                     videoId,          // $1
