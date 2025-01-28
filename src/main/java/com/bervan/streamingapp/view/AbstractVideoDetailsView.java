@@ -123,7 +123,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         List<Metadata> sortedEpisodes = new ArrayList<>();
 
         for (int i = 1; i <= episodes; i++) {
-            String pattern = "(?:Ep(?:isode)?\\s?)" + "(" + i + ")";
+            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
             for (Metadata metadata : allVideosInSeason) {
                 Matcher matcher = regex.matcher(metadata.getFilename());
