@@ -11,10 +11,10 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.io.File;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public abstract class AbstractVideoDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
@@ -117,30 +117,54 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         Map<String, List<Metadata>> stringListMap = videoManager.loadVideoDirectoryContent(seasonDirectory);
         List<Metadata> allVideosInSeason = stringListMap.entrySet().stream().filter(e -> e.getKey().equals("DIRECTORY"))
                 .map(Map.Entry::getValue).flatMap(Collection::stream).filter(e -> e.getFilename().startsWith("Ep"))
-                .map(e -> videoManager.loadVideoDirectoryContent(e).get("VIDEO"))
-                .flatMap(Collection::stream)
                 .toList();
 
-        return createVideoLayout(allVideosInSeason, defaultPoster);
+        int episodes = allVideosInSeason.size();
+        List<Metadata> sortedEpisodes = new ArrayList<>();
+
+        for (int i = 1; i <= episodes; i++) {
+            String pattern = "(?:Ep(?:isode)?\\s?)" + "(" + i + ")";
+            Pattern regex = Pattern.compile(pattern);
+            for (Metadata metadata : allVideosInSeason) {
+                Matcher matcher = regex.matcher(metadata.getFilename());
+                if (matcher.find()) {
+                    List<Metadata> video = videoManager.loadVideoDirectoryContent(metadata).get("VIDEO");
+                    if (!video.isEmpty()) {
+                        sortedEpisodes.add(video.get(0));
+                    } else {
+                        logger.error("Episode folder is empty! " + metadata.getPath() + File.separator + metadata.getFilename());
+                    }
+                }
+            }
+        }
+
+        return createVideoLayout(sortedEpisodes, defaultPoster, true);
     }
 
     private HorizontalLayout allVideos(List<Metadata> videos, List<Metadata> defaultPoster) {
-        return createVideoLayout(videos, defaultPoster);
+        return createVideoLayout(videos, defaultPoster, false);
     }
 
-    private HorizontalLayout createVideoLayout(List<Metadata> videos, List<Metadata> defaultPoster) {
+    private HorizontalLayout createVideoLayout(List<Metadata> videos, List<Metadata> defaultPoster, boolean useEpisodeGeneratedName) {
         HorizontalLayout scrollingLayout = new HorizontalLayout();
         scrollingLayout.getStyle()
                 .set("overflow-x", "hidden")
                 .set("white-space", "nowrap")
                 .set("padding", "10px");
 
+        int videoCounter = 1;
         for (Metadata video : videos) {
             try {
                 VerticalLayout tile = getTile();
                 String imageSrc = "/storage/videos/poster/" + video.getId();
                 Image image = getImage(video.getFilename(), imageSrc, defaultPoster);
-                H4 title = getTitle(video.getFilename());
+
+                H4 title;
+                if (useEpisodeGeneratedName) {
+                    title = getTitle("Episode " + videoCounter);
+                } else {
+                    title = getTitle(video.getFilename());
+                }
 
                 tile.add(image, title);
                 tile.addClickListener(click ->
@@ -151,6 +175,8 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 logger.error("Unable to load video!", e);
                 showErrorNotification("Unable to load video!");
             }
+
+            videoCounter++;
         }
 
         return scrollingLayout;
