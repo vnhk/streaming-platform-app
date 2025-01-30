@@ -3,10 +3,7 @@ package com.bervan.streamingapp;
 
 import com.bervan.common.model.BervanBaseEntity;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import org.hibernate.annotations.GenericGenerator;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -41,8 +38,7 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
         this.userId = userId;
     }
 
-
-    public boolean isDeleted() {
+    public Boolean isDeleted() {
         return deleted;
     }
 
@@ -75,10 +71,6 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
 
     public void setCreationDate(LocalDateTime creationDate) {
         this.creationDate = creationDate;
-    }
-
-    public Boolean getDeleted() {
-        return deleted;
     }
 
     public void setDeleted(Boolean deleted) {
