@@ -42,7 +42,7 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
         return deleted;
     }
 
-    public void setDeleted(boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
     }
 
@@ -71,10 +71,6 @@ public class WatchDetails extends BervanBaseEntity<UUID> {
 
     public void setCreationDate(LocalDateTime creationDate) {
         this.creationDate = creationDate;
-    }
-
-    public void setDeleted(Boolean deleted) {
-        this.deleted = deleted;
     }
 
     public double getCurrentVideoTime() {
