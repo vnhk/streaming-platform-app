@@ -297,7 +297,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     @ClientCallable
     public void saveWatchProgress(String videoId, double lastWatchedTime) {
-        logger.info("videoId + lastWatchedTime: " + videoId + "=" + lastWatchedTime);
         WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(
                 AuthService.getLoggedUserId().toString(), videoId
         );
@@ -306,7 +305,6 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
 
     @ClientCallable
     public void saveActualDelay(String videoId, double enDelay, double plDelay) {
-        logger.info("Saving subtitle delays: EN=" + enDelay + ", PL=" + plDelay + " for videoId=" + videoId);
         WatchDetails watchDetails = videoManager.getOrCreateWatchDetails(
                 AuthService.getLoggedUserId().toString(), videoId
         );
