@@ -218,9 +218,10 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    $0.$server.saveActualDelay($1, enDelay, plDelay);" +
                             " }); "
                             +
-                            " document.addEventListener('DOMContentLoaded', () => { " +
-                            "    if (videoPlayer) {" +
+                            "    window.setTimeout(() => {" +
+                            "     if (videoPlayer) {" +
                             "        const textTracks = videoPlayer.textTracks; " +
+                            "        console.log(textTracks);" +
                             "        for (let i = 0; i < textTracks.length; i++) { " +
                             "           if (textTracks[i].language === 'pl' || textTracks[i].label.toLowerCase() === 'polish') {" +
                             "               adjustSubtitleTiming(textTracks[i], plDelay);" +
@@ -228,10 +229,10 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "               adjustSubtitleTiming(textTracks[i], enDelay);" +
                             "           }" +
                             "        }" +
-                            "    } else {" +
+                            "     } else {" +
                             "        console.error('Video player element not found.');" +
-                            "    }" +
-                            " }); "
+                            "     }" +
+                            "    }, 5000);"
                     ,
                     getElement(),     // $0
                     videoId,          // $1
