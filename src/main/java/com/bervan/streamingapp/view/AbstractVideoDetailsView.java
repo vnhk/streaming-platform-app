@@ -130,7 +130,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 if (matcher.find()) {
                     Map<String, List<Metadata>> videoFolder = videoManager.loadVideoDirectoryContent(metadata);
                     List<Metadata> video = videoFolder.get("VIDEO");
-                    if (!video.isEmpty()) {
+                    if (video != null && !video.isEmpty()) {
                         sortedEpisodesFolders.add(videoFolder);
                     } else {
                         logger.error("Episode folder is empty! " + metadata.getPath() + File.separator + metadata.getFilename());
