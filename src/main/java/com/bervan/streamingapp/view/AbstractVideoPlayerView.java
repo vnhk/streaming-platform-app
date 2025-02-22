@@ -186,11 +186,13 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             " function adjustSubtitleTiming(track, delay) {" +
                             "    if (!track || !track.cues) return;" +
                             "    for (let i = 0; i < track.cues.length; i++) {" +
-                            "        const cue = track.cues[i];" +
-                            "        console.log('pre:', cue)" +
-                            "        cue.startTime += delay;" +
-                            "        cue.endTime += delay;" +
-                            "        console.log('post:', cue)" +
+                            "        let cue = track.cues[i]; " +
+                            "        console.log('pre:'); " +
+                            "        console.log(cue); " +
+                            "        cue.startTime += delay; " +
+                            "        cue.endTime += delay; " +
+                            "        console.log('post:'); " +
+                            "        console.log(cue); " +
                             "    }" +
                             " } " +
 
