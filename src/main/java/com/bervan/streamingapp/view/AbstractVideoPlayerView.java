@@ -187,8 +187,10 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "    if (!track || !track.cues) return;" +
                             "    for (let i = 0; i < track.cues.length; i++) {" +
                             "        const cue = track.cues[i];" +
+                            "        console.log('pre:', cue)" +
                             "        cue.startTime += delay;" +
                             "        cue.endTime += delay;" +
+                            "        console.log('post:', cue)" +
                             "    }" +
                             " } " +
 
@@ -232,7 +234,7 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             "     } else {" +
                             "        console.error('Video player element not found.');" +
                             "     }" +
-                            "    }, 5000);"
+                            "    }, 10000);"
                     ,
                     getElement(),     // $0
                     videoId,          // $1
