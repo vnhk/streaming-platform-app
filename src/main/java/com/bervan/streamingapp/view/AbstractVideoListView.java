@@ -27,9 +27,12 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         this.videoManager = videoManager;
 
         VerticalLayout groupedVideosLayout = createScrollableSection("Movies/TV Series:", groupedVideos());
-        VerticalLayout allVideosLayout = createScrollableSection("All Videos", allVideos());
 
-        add(groupedVideosLayout, new Hr(), allVideosLayout);
+        //its time-consuming
+        //        VerticalLayout allVideosLayout = createScrollableSection("All Videos", allVideos());
+
+//        add(groupedVideosLayout, new Hr(), allVideosLayout);
+        add(groupedVideosLayout, new Hr());
     }
 
     private VerticalLayout createScrollableSection(String title, HorizontalLayout contentLayout) {
@@ -60,9 +63,9 @@ public abstract class AbstractVideoListView extends AbstractStreamingPage {
         return createVideoLayout(videoManager.loadVideosMainDirectories(), ROUTE_NAME + "/details/");
     }
 
-    private HorizontalLayout allVideos() {
-        return createVideoLayout(videoManager.loadVideos(), ROUTE_NAME + "/video-player/");
-    }
+//    private HorizontalLayout allVideos() {
+//        return createVideoLayout(videoManager.loadVideos(), ROUTE_NAME + "/video-player/");
+//    }
 
     private HorizontalLayout createVideoLayout(List<Metadata> videos, String route) {
         HorizontalLayout scrollingLayout = new HorizontalLayout();
