@@ -71,10 +71,12 @@ public class VideoManager {
 
         List<String> subtitlesPartsStr = subtitlesParts.get(language);
         for (String engSubtitle : subtitlesPartsStr) {
-            for (String separator : subtitleSeparator) {
-                String engPart = separator + engSubtitle + separator;
-                subtitles.stream().filter(e -> e.getFilename().toLowerCase().contains(engPart.toLowerCase()))
-                        .findFirst().ifPresent(subtitlesFound::add);
+            for (String separator1 : subtitleSeparator) { //.en_ -en. -en_ etc
+                for (String separator2 : subtitleSeparator) {
+                    String engPart = separator1 + engSubtitle + separator2;
+                    subtitles.stream().filter(e -> e.getFilename().toLowerCase().contains(engPart.toLowerCase()))
+                            .findFirst().ifPresent(subtitlesFound::add);
+                }
             }
         }
 
