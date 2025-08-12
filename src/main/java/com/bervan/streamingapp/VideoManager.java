@@ -8,6 +8,7 @@ import com.bervan.common.search.model.SearchResponse;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
 import jakarta.validation.constraints.NotNull;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,25 +21,77 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class VideoManager {
+    private static final List<String> subtitleSeparator = List.of(".", "_", "-", " ");
+    private static final List<String> polSubtitles = List.of("pl", "pol", "polish");
+    private static final List<String> engSubtitles = List.of("en", "eng", "english");
+    private static final Map<String, List<String>> subtitlesParts = new HashMap<>();
+
+    public static String PL = "pl";
+    public static String EN = "en";
+
+    static {
+        subtitlesParts.put(PL, polSubtitles);
+        subtitlesParts.put(EN, engSubtitles);
+    }
+
+    private final WatchDetailsRepository watchDetailsRepository;
+    private final List<String> supportedExtensions = Arrays.asList("mp4");
+    private final SearchService searchService;
+    private final FileServiceManager fileServiceManager;
     @Value("${file.service.storage.folder}")
     public String pathToFileStorage;
     @Value("${streaming-platform.file-storage-relative-path}")
     public String appFolder;
 
-    private final WatchDetailsRepository watchDetailsRepository;
-
-    private final List<String> supportedExtensions = Arrays.asList("mp4");
-
-    private final SearchService searchService;
-    private final FileServiceManager fileServiceManager;
 
     public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
         this.watchDetailsRepository = watchDetailsRepository;
         this.searchService = searchService;
         this.fileServiceManager = fileServiceManager;
+    }
+
+    private static void putIf(String key, Map<String, List<Metadata>> result, Metadata file) {
+        if (!result.containsKey(key)) {
+            result.put(key, new ArrayList<>());
+        }
+        result.get(key).add(file);
+    }
+
+    public Optional<Metadata> getSubtitle(String language, List<Metadata> subtitles) {
+        List<Metadata> subtitlesFound = new ArrayList<>();
+
+        if (subtitlesParts.get(language).isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<String> subtitlesPartsStr = subtitlesParts.get(language);
+        for (String engSubtitle : subtitlesPartsStr) {
+            for (String separator : subtitleSeparator) {
+                String engPart = separator + engSubtitle + separator;
+                subtitles.stream().filter(e -> e.getFilename().toLowerCase().contains(engPart.toLowerCase()))
+                        .findFirst().ifPresent(subtitlesFound::add);
+            }
+        }
+
+        if (subtitlesFound.isEmpty()) {
+            log.error("Found 0 subtitles for language = {}. All available subtitles: {}", language, subtitles.stream()
+                    .map(Metadata::getFilename)
+                    .collect(Collectors.joining(", ")));
+            return Optional.empty();
+        }
+
+        if (subtitlesFound.size() > 1) {
+            log.warn("Found more than 1 subtitles for language = {}: {}", language, subtitlesFound.stream()
+                    .map(Metadata::getFilename)
+                    .collect(Collectors.joining(", ")));
+        }
+
+        return Optional.of(subtitlesFound.get(0));
     }
 
     public List<Metadata> loadVideosMainDirectories() {
@@ -83,7 +136,6 @@ public class VideoManager {
         return pathToFileStorage + File.separator +
                 metadata.getPath() + File.separator + metadata.getFilename();
     }
-
 
     public Optional<Metadata> getNextVideo(Metadata videoMetadata) {
         Optional<Metadata> videoParentFolder = fileServiceManager.getParent(videoMetadata);
@@ -161,13 +213,6 @@ public class VideoManager {
             }
         }
         return result;
-    }
-
-    private static void putIf(String key, Map<String, List<Metadata>> result, Metadata file) {
-        if (!result.containsKey(key)) {
-            result.put(key, new ArrayList<>());
-        }
-        result.get(key).add(file);
     }
 
     public Metadata getMainMovieFolder(Metadata video) {

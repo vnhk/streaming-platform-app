@@ -12,13 +12,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/storage/videos")
 public class VideoController {
-
     private final VideoManager videoManager;
     private final BervanLogger logger;
 
@@ -99,8 +97,7 @@ public class VideoController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Optional<Metadata> subtitle = subtitles.stream().filter(e -> e.getFilename().endsWith(language + "." + e.getExtension()))
-                    .findFirst();
+            Optional<Metadata> subtitle = videoManager.getSubtitle(language, subtitles);
             if (subtitle.isPresent()) {
 
                 Resource resource = getSubtitleResource(subtitle.get());
