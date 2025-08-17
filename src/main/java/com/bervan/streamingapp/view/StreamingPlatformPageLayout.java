@@ -2,15 +2,16 @@ package com.bervan.streamingapp.view;
 
 
 import com.bervan.common.MenuNavigationComponent;
+import com.vaadin.flow.component.icon.VaadinIcon;
 
 public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
 
     public StreamingPlatformPageLayout(String routeName, String... notVisibleButtonRoutes) {
         super(routeName, notVisibleButtonRoutes);
 
-        addButtonIfVisible(menuButtonsRow, AbstractVideoListView.ROUTE_NAME, "Home");
-        addButtonIfVisible(menuButtonsRow, AbstractVideoDetailsView.ROUTE_NAME, "Details");
-        addButtonIfVisible(menuButtonsRow, AbstractVideoPlayerView.ROUTE_NAME, "Player");
+        addButtonIfVisible(menuButtonsRow, AbstractVideoListView.ROUTE_NAME, "Home", VaadinIcon.HOME.create());
+        addButtonIfVisible(menuButtonsRow, AbstractVideoDetailsView.ROUTE_NAME, "Details", VaadinIcon.FILE_TEXT.create());
+        addButtonIfVisible(menuButtonsRow, AbstractVideoPlayerView.ROUTE_NAME, "Player", VaadinIcon.PLAY_CIRCLE.create());
 
         add(menuButtonsRow);
     }
