@@ -34,7 +34,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
 
     private void setupViewStyles() {
         getStyle()
-                .set("background", "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)")
+                .set("background", "linear-gradient(135deg, var(--streaming-tile-background), var(--streaming-tile-background))")
                 .set("min-height", "100vh")
                 .set("padding", "0")
                 .set("margin", "0");
@@ -77,7 +77,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         heroSection.setWidthFull();
         heroSection.setAlignItems(FlexComponent.Alignment.CENTER);
         heroSection.getStyle()
-                .set("background", "linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('/storage/videos/poster/" + rootFolder.getId() + "')")
+                .set("background", "linear-gradient(var(--streaming-overlay-background), var(--streaming-overlay-background)), url('/storage/videos/poster/" + rootFolder.getId() + "')")
                 .set("background-size", "cover")
                 .set("background-position", "center")
                 .set("background-attachment", "fixed")
@@ -100,7 +100,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         posterImage.getStyle()
                 .set("object-fit", "cover")
                 .set("border-radius", "12px")
-                .set("box-shadow", "0 20px 40px rgba(0,0,0,0.5)")
+                .set("box-shadow", "0 20px 40px var(--streaming-tile-shadow)")
                 .set("transition", "transform 0.3s ease");
 
         String fallbackImageSrc = "images/no_video_image.png";
@@ -120,7 +120,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .set("margin", "0 0 20px 0")
                 .set("font-size", "3.5rem")
                 .set("font-weight", "700")
-                .set("text-shadow", "2px 2px 4px rgba(0,0,0,0.8)")
+                .set("text-shadow", "2px 2px 4px var(--streaming-title-shadow)")
                 .set("line-height", "1.2");
 
         // Description placeholder - you can extend this to load from metadata or external source
@@ -139,25 +139,26 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         Button playButton = new Button("Play Now", new Icon(VaadinIcon.PLAY));
         playButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         playButton.getStyle()
-                .set("background", "linear-gradient(45deg, #ff6b6b, #ee5a52)")
+                .set("background", "linear-gradient(45deg, var(--streaming-play-icon-color), var(--streaming-play-icon-color))")
                 .set("border", "none")
                 .set("padding", "15px 30px")
                 .set("font-size", "1.1rem")
                 .set("border-radius", "25px")
-                .set("box-shadow", "0 4px 15px rgba(255,107,107,0.4)")
+                .set("box-shadow", "0 4px 15px var(--streaming-tile-shadow-hover)")
                 .set("transition", "all 0.3s ease");
 
         Button editDetails = new Button("Edit", new Icon(VaadinIcon.EDIT));
         editDetails.addThemeVariants(ButtonVariant.LUMO_CONTRAST, ButtonVariant.LUMO_LARGE);
         editDetails.getStyle()
                 .set("background", "rgba(255,255,255,0.1)")
-                .set("border", "2px solid rgba(255,255,255,0.3)")
+                .set("border", "2px solid var(--streaming-tile-border)")
                 .set("color", "white")
                 .set("padding", "15px 30px")
                 .set("font-size", "1.1rem")
                 .set("border-radius", "25px")
                 .set("backdrop-filter", "blur(10px)")
                 .set("transition", "all 0.3s ease");
+
         // Find first video to play
         Map<String, List<Metadata>> rootContent = videoManager.loadVideoDirectoryContent(rootFolder);
         String firstVideoId = findFirstVideoOrLatestVideoWatchedByUsed(rootContent);
