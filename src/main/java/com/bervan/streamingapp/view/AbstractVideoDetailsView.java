@@ -123,7 +123,6 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .set("text-shadow", "2px 2px 4px var(--streaming-title-shadow)")
                 .set("line-height", "1.2");
 
-        // Description placeholder - you can extend this to load from metadata or external source
         Paragraph description = new Paragraph(getDescription(rootFolder.getFilename()));
         description.getStyle()
                 .set("font-size", "1.2rem")
