@@ -350,9 +350,8 @@ public abstract class AbstractVideoPlayerView extends AbstractStreamingPage impl
                             // Generate or get room ID from URL parameter or localStorage
                             const urlParams = new URLSearchParams(window.location.search);
                             let roomId = urlParams.get('roomId') || localStorage.getItem('roomId');
-                            if (!roomId) {
-                                roomId = 'room_' + Math.random().toString(36).substr(2, 9);
-                                localStorage.setItem('roomId', roomId);
+                            if (!roomId || roomId.length > 5) {
+                                roomId = 'room_' + Math.floor(Math.random() * 90000 + 10000);                                localStorage.setItem('roomId', roomId);
                             }
                             return roomId;
                         }
