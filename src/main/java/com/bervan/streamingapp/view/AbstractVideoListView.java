@@ -15,7 +15,7 @@ import com.vaadin.flow.router.Route;
 import java.util.List;
 
 @Route(AbstractVideoListView.ROUTE_NAME)
-public abstract class AbstractVideoListView extends AbstractStreamingPage {
+public abstract class AbstractVideoListView extends AbstractRemoteControlSupportedView {
     public static final String ROUTE_NAME = "/streaming-platform";
     private final BervanLogger logger;
     private final VideoManager videoManager;
