@@ -1,6 +1,6 @@
 package com.bervan.streamingapp.view;
 
-import com.bervan.common.AbstractPageView;
+import com.bervan.common.view.AbstractPageView;
 import com.bervan.filestorage.model.Metadata;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
