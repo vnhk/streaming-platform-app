@@ -99,7 +99,7 @@ public class VideoManager {
     public List<Metadata> loadVideosMainDirectories() {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
-                SearchOperation.EQUALS_OPERATION, appFolder.substring(1));
+                SearchOperation.EQUALS_OPERATION, appFolder + File.separator);
         searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
                 SearchOperation.EQUALS_OPERATION, true);
 
@@ -192,7 +192,7 @@ public class VideoManager {
     public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
-                SearchOperation.EQUALS_OPERATION, directory.getPath() + File.separator + directory.getFilename());
+                SearchOperation.EQUALS_OPERATION, directory.getPath() + directory.getFilename() + File.separator);
 
         SearchQueryOption options = new SearchQueryOption(Metadata.class);
         options.setSortField("filename");
@@ -224,7 +224,7 @@ public class VideoManager {
                 Path fileName = path.getFileName();
                 SearchRequest searchRequest = new SearchRequest();
                 searchRequest.addCriterion("G1", Metadata.class, "path",
-                        SearchOperation.EQUALS_OPERATION, path.getParent().toString());
+                        SearchOperation.EQUALS_OPERATION, path.getParent().toString() + File.separator);
 
                 SearchQueryOption options = new SearchQueryOption(Metadata.class);
                 options.setSortField("filename");
@@ -243,11 +243,11 @@ public class VideoManager {
 
     public Metadata getVideoFolder(Metadata video) {
         Path path = Path.of(video.getPath());
-        while (path.getParent() != null) {
+        if (path.getParent() != null) {
             Path fileName = path.getFileName();
             SearchRequest searchRequest = new SearchRequest();
             searchRequest.addCriterion("G1", Metadata.class, "path",
-                    SearchOperation.EQUALS_OPERATION, path.getParent().toString());
+                    SearchOperation.EQUALS_OPERATION, path.getParent().toString() + File.separator);
 
             SearchQueryOption options = new SearchQueryOption(Metadata.class);
             options.setSortField("filename");
