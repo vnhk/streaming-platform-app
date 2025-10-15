@@ -6,11 +6,13 @@ import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
 import com.vaadin.flow.component.ClientCallable;
+import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -20,6 +22,7 @@ import java.util.UUID;
 
 public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/video-player";
+    protected final HorizontalLayout topLayout = new HorizontalLayout();
     private final BervanLogger logger;
     private final VideoManager videoManager;
 
@@ -46,13 +49,15 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
 
             Metadata mainDirectory = videoManager.getMainMovieFolder(video.get(0));
 
+            add(topLayout);
             if (mainDirectory != null) {
                 Button detailsButton = new Button(mainDirectory.getFilename() + " - Details");
                 detailsButton.addClassName("option-button");
                 detailsButton.addClickListener(click ->
                         UI.getCurrent().navigate("/streaming-platform/details/" + mainDirectory.getId())
                 );
-                add(detailsButton);
+
+                topLayout.add(detailsButton);
             }
 
             Optional<Metadata> prevVideo = videoManager.getPrevVideo(video.get(0));
@@ -64,7 +69,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                 prevButton.addClickListener(click ->
                         UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + prevVideo.get().getId())
                 );
-                add(prevButton);
+                topLayout.add(prevButton);
             }
 
             if (nextVideo.isPresent()) {
@@ -73,7 +78,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                 nextButton.addClickListener(click ->
                         UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + nextVideo.get().getId())
                 );
-                add(nextButton);
+                topLayout.add(nextButton);
             }
 
             add(new Hr(), new H4("Video: " + video.get(0).getFilename()));
@@ -156,7 +161,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                             "document.getElementById('subtitleDelayInputEN').value = $3;" +
                             "document.getElementById('subtitleDelayInputPL').value = $4;" +
 
-                            " document.addEventListener('keydown', function(event) {" +
+                            " window._videoPlayerKeyHandler = function(event) {" +
                             "    if (event.key === 'b') {" +
                             toggleSubtitles() +
                             "    } else if (event.key === ' ' || event.key === 'Spacebar') {" +
@@ -168,11 +173,12 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                             "    } else if (event.key === 'f') {" +
                             toggleFullscreen() +
                             "    } else {return;}" +
-                            " }); " +
-
-                            " if (videoPlayer) {" +
+                            " }; " +
+                            " document.addEventListener('keydown', window._videoPlayerKeyHandler);  " +
+                            "   " +
+                            "if (videoPlayer) {" +
                             "    let lastSentTime = 0;" +
-                            "    setInterval(() => {" +
+                            " window._videoPlayerInterval = setInterval(() => {" +
                             "        if (!isNaN(videoPlayer.currentTime) && Math.abs(videoPlayer.currentTime - lastSentTime) >= 5) {" +
                             "            lastSentTime = videoPlayer.currentTime;" +
                             "            $0.$server.saveWatchProgress($1, videoPlayer.currentTime);" +
@@ -309,5 +315,20 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                 AuthService.getLoggedUserId().toString(), videoId
         );
         videoManager.saveSubtitleDelays(watchDetails, enDelay, plDelay);
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        // Remove keyboard listener and interval on detach
+        getElement().executeJs(
+                "if (window._videoPlayerKeyHandler) {" +
+                        "  document.removeEventListener('keydown', window._videoPlayerKeyHandler);" +
+                        "  window._videoPlayerKeyHandler = null;" +
+                        "}" +
+                        "if (window._videoPlayerInterval) {" +
+                        "  clearInterval(window._videoPlayerInterval);" +
+                        "  window._videoPlayerInterval = null;" +
+                        "}"
+        );
     }
 }
