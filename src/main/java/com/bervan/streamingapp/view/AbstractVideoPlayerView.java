@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.common.component.BervanButton;
 import com.bervan.common.service.AuthService;
 import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
@@ -13,6 +14,8 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -131,25 +134,72 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                             "`;" +
                             "document.head.appendChild(style);"
             );
+            // === VIDEO SETUP ===
+            Div videoWrapper = new Div();
+            videoWrapper.getStyle().set("text-align", "center");
 
-            videoContainer.getElement().setProperty(
-                    "innerHTML",
-                    "<div id='videoContainer'>" +
-                            "  <video id='videoPlayer' controls playsinline preload='auto'>" +
-                            "    <source src='" + videoSrc + "' type='video/mp4'>" +
-                            "    <track id='trackEN' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/en' srclang='en' label='English' default>" +
-                            "    <track id='trackPL' kind='subtitles' src='/storage/videos/subtitles/" + videoId + "/pl' srclang='pl' label='Polish'>" +
-                            "  </video>" +
-                            "  <div style='margin-top: 10px; display: flex; flex-direction: column; align-items: center;'>" +
-                            "    <label for='subtitleDelayInputEN'>Subtitle Delay (EN) [s]:</label>" +
-                            "    <input id='subtitleDelayInputEN' type='number' step='0.5' style='width: 100px; text-align: center;'/>" +
-                            "    <label for='subtitleDelayInputPL'>Subtitle Delay (PL) [s]:</label>" +
-                            "    <input id='subtitleDelayInputPL' type='number' step='0.5' style='width: 100px; text-align: center;'/>" +
-                            "  </div>" +
-                            "</div>"
-            );
+            Element videoElement = getVideoElement(videoId, videoSrc);
 
-            add(videoContainer);
+            videoWrapper.getElement().appendChild(videoElement);
+
+            // === CONTROLS ===
+            Div controls = new Div();
+            controls.getStyle().set("margin-top", "10px");
+            controls.getStyle().set("display", "flex");
+            controls.getStyle().set("flex-direction", "column");
+            controls.getStyle().set("align-items", "center");
+
+            NumberField delayENElement = new NumberField("Subtitle Delay (EN) [s]");
+            delayENElement.setId("subtitleDelayInputEN");
+            delayENElement.setStep(0.5);
+            delayENElement.setWidth("300px");
+            delayENElement.setValue(enDelay);
+
+            NumberField delayPLElement = new NumberField("Subtitle Delay (PL) [s]");
+            delayPLElement.setId("subtitleDelayInputPL");
+            delayPLElement.setStep(0.5);
+            delayPLElement.setWidth("300px");
+            delayPLElement.setValue(plDelay);
+
+            controls.add(delayENElement, delayPLElement, new BervanButton("Shift (workaround for startup)", (e) -> {
+                delayPLElement.setValue(plDelay);
+                delayENElement.setValue(enDelay);
+            }));
+
+            add(videoWrapper, controls);
+
+            // === JS LOGIC: Shift subtitle cues ===
+            String shiftScript = """
+                        window.shiftSubtitles = (lang, delay) => {
+                          const video = document.getElementById('videoPlayer');
+                          if (!video) return;
+                          const tracks = video.textTracks;
+                          for (let i = 0; i < tracks.length; i++) {
+                            const t = tracks[i];
+                            if (t.language === lang || t.label.toLowerCase() === lang) {
+                              for (let j = 0; j < t.cues.length; j++) {
+                                const cue = t.cues[j];
+                                cue.startTime = Math.max(0, cue.startTime + delay);
+                                cue.endTime = Math.max(0, cue.endTime + delay);
+                              }
+                            }
+                          }
+                        };
+                    """;
+            getElement().executeJs(shiftScript);
+
+            // === React to value change ===
+            delayENElement.addValueChangeListener(e -> {
+                double val = e.getValue() != null ? e.getValue() : 0.0;
+                getElement().executeJs("window.shiftSubtitles('en', $0)", val);
+                saveActualDelay(videoId, val, plDelay);
+            });
+
+            delayPLElement.addValueChangeListener(e -> {
+                double val = e.getValue() != null ? e.getValue() : 0.0;
+                getElement().executeJs("window.shiftSubtitles('pl', $0)", val);
+                saveActualDelay(videoId, enDelay, val);
+            });
 
             double currentVideoTime = watchDetails.getCurrentVideoTime();
 
@@ -158,8 +208,6 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                             " if (videoPlayer) {" +
                             "    videoPlayer.currentTime = $2;" +
                             " }" +
-                            "document.getElementById('subtitleDelayInputEN').value = $3;" +
-                            "document.getElementById('subtitleDelayInputPL').value = $4;" +
 
                             " window._videoPlayerKeyHandler = function(event) {" +
                             "    if (event.key === 'b') {" +
@@ -184,71 +232,53 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                             "            $0.$server.saveWatchProgress($1, videoPlayer.currentTime);" +
                             "        }" +
                             "    }, 10000);" +
-                            " } " +
-
-                            " let enDelay = $3; " +
-                            " let plDelay = $4; " +
-
-                            " function adjustSubtitleTiming(track, delay) {" +
-                            "    if (!track || !track.cues) return;" +
-                            "    for (let i = 0; i < track.cues.length; i++) {" +
-                            "        let cue = track.cues[i]; " +
-                            "        cue.startTime += delay; " +
-                            "        cue.endTime += delay; " +
-                            "    }" +
-                            " } " +
-
-                            " document.getElementById('subtitleDelayInputEN').addEventListener('input', function(event) {" +
-                            "    const textTracks = videoPlayer.textTracks;" +
-                            "    const newEn = parseFloat(event.target.value) || 0;" +
-                            "    let diffEn = newEn - enDelay;" +
-                            "    enDelay = newEn;" +
-                            "    for (let i = 0; i < textTracks.length; i++) {" +
-                            "        if (textTracks[i].language === 'en' || textTracks[i].label.toLowerCase() === 'english') {" +
-                            "            adjustSubtitleTiming(textTracks[i], diffEn);" +
-                            "        }" +
-                            "    }" +
-                            "    $0.$server.saveActualDelay($1, enDelay, plDelay);" +
-                            " }); "
-                            +
-                            " document.getElementById('subtitleDelayInputPL').addEventListener('input', function(event) {" +
-                            "    const textTracks = videoPlayer.textTracks;" +
-                            "    const newPl = parseFloat(event.target.value) || 0;" +
-                            "    let diffPl = newPl - plDelay;" +
-                            "    plDelay = newPl;" +
-                            "    for (let i = 0; i < textTracks.length; i++) {" +
-                            "        if (textTracks[i].language === 'pl' || textTracks[i].label.toLowerCase() === 'polish') {" +
-                            "            adjustSubtitleTiming(textTracks[i], diffPl);" +
-                            "        }" +
-                            "    }" +
-                            "    $0.$server.saveActualDelay($1, enDelay, plDelay);" +
-                            " }); "
-                            +
-                            "    window.setTimeout(() => {" +
-                            "     if (videoPlayer) {" +
-                            "        const textTracks = videoPlayer.textTracks; " +
-                            "        for (let i = 0; i < textTracks.length; i++) { " +
-                            "           if (textTracks[i].language === 'pl' || textTracks[i].label.toLowerCase() === 'polish') {" +
-                            "               adjustSubtitleTiming(textTracks[i], plDelay);" +
-                            "           } else if (textTracks[i].language === 'en' || textTracks[i].label.toLowerCase() === 'english') { " +
-                            "               adjustSubtitleTiming(textTracks[i], enDelay);" +
-                            "           }" +
-                            "        }" +
-                            "     } else {" +
-                            "        console.error('Video player element not found.');" +
-                            "     }" +
-                            "    }, 10000);"
+                            " } "
                     ,
                     getElement(),     // $0
                     videoId,          // $1
-                    currentVideoTime, // $2
-                    enDelay,          // $3
-                    plDelay           // $4
+                    currentVideoTime // $2
             );
         } catch (Exception e) {
             logger.error("Could not load video!", e);
             showErrorNotification("Could not load video!");
         }
+    }
+
+    private Element getVideoElement(String videoId, String videoSrc) {
+        Element videoElement = new Element("video");
+        videoElement.setAttribute("id", "videoPlayer");
+        videoElement.setAttribute("controls", "");
+        videoElement.setAttribute("playsinline", "");
+        videoElement.setAttribute("preload", "auto");
+        videoElement.setAttribute("width", "640");
+        videoElement.setAttribute("height", "360");
+
+        // Source
+        Element source = new Element("source");
+        source.setAttribute("src", videoSrc);
+        source.setAttribute("type", "video/mp4");
+        videoElement.appendChild(source);
+
+        // Subtitle EN
+        Element trackEN = new Element("track");
+        trackEN.setAttribute("id", "trackEN");
+        trackEN.setAttribute("kind", "subtitles");
+        trackEN.setAttribute("src", "/storage/videos/subtitles/" + videoId + "/en");
+        trackEN.setAttribute("srclang", "en");
+        trackEN.setAttribute("label", "English");
+        trackEN.setAttribute("default", "");
+
+        // Subtitle PL
+        Element trackPL = new Element("track");
+        trackPL.setAttribute("id", "trackPL");
+        trackPL.setAttribute("kind", "subtitles");
+        trackPL.setAttribute("src", "/storage/videos/subtitles/" + videoId + "/pl");
+        trackPL.setAttribute("srclang", "pl");
+        trackPL.setAttribute("label", "Polish");
+
+        videoElement.appendChild(trackEN);
+        videoElement.appendChild(trackPL);
+        return videoElement;
     }
 
 
@@ -320,6 +350,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         // Remove keyboard listener and interval on detach
+        getElement().removeAllChildren();
         getElement().executeJs(
                 "if (window._videoPlayerKeyHandler) {" +
                         "  document.removeEventListener('keydown', window._videoPlayerKeyHandler);" +
