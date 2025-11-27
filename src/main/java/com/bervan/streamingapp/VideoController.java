@@ -1,7 +1,7 @@
 package com.bervan.streamingapp;
 
-import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -12,17 +12,17 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/storage/videos")
+@Slf4j
 public class VideoController {
     private final VideoManager videoManager;
-    private final BervanLogger logger;
 
-    public VideoController(VideoManager videoManager, BervanLogger logger) {
+    public VideoController(VideoManager videoManager) {
         this.videoManager = videoManager;
-        this.logger = logger;
     }
 
     @GetMapping("/poster/{folderId}")
@@ -31,7 +31,7 @@ public class VideoController {
             List<Metadata> metadata = videoManager.loadById(folderId);
 
             if (metadata.size() != 1) {
-                logger.error("Could not find file based on provided id!");
+                log.error("Could not find file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
@@ -47,7 +47,7 @@ public class VideoController {
 
             return ResponseEntity.ok().contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.IMAGE_PNG)).body(resource);
         } catch (Exception e) {
-            logger.error(e);
+            log.error("Failed to load poster", e);
             throw new RuntimeException(e);
         }
     }
@@ -58,13 +58,13 @@ public class VideoController {
             List<Metadata> metadata = videoManager.loadById(metadataId);
 
             if (metadata.size() != 1) {
-                logger.error("Could not find file based on provided id!");
+                log.error("Could not find file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
             Metadata m = metadata.get(0);
             if (!(m.getFilename().endsWith(".jpg") || m.getFilename().endsWith(".png"))) {
-                logger.error("File is not jpg or png based on provided id!");
+                log.error("File is not jpg or png based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
@@ -76,7 +76,7 @@ public class VideoController {
 
             return ResponseEntity.ok().contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.IMAGE_PNG)).body(resource);
         } catch (Exception e) {
-            logger.error(e);
+            log.error("Failed to load poster", e);
             throw new RuntimeException(e);
         }
     }
@@ -87,7 +87,7 @@ public class VideoController {
             List<Metadata> metadata = videoManager.loadById(videoId);
 
             if (metadata.size() != 1) {
-                logger.error("Could not find file based on provided id!");
+                log.error("Could not find file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
@@ -115,7 +115,7 @@ public class VideoController {
             }
             return ResponseEntity.notFound().build();
         } catch (IOException e) {
-            logger.error("Error! ", e);
+            log.error("Error! ", e);
             return ResponseEntity.badRequest().build();
         }
     }
@@ -139,7 +139,7 @@ public class VideoController {
         List<Metadata> metadata = videoManager.loadById(videoId);
 
         if (metadata.size() != 1) {
-            logger.error("Could not find file based on provided id!");
+            log.error("Could not find file based on provided id!");
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 

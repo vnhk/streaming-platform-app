@@ -1,6 +1,5 @@
 package com.bervan.streamingapp.view;
 
-import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.UI;
@@ -14,20 +13,20 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 public abstract class AbstractVideoDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
-    private final BervanLogger logger;
     private final VideoManager videoManager;
 
-    public AbstractVideoDetailsView(BervanLogger logger, VideoManager videoManager) {
+    public AbstractVideoDetailsView( VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME);
-        this.logger = logger;
         this.videoManager = videoManager;
         setupViewStyles();
     }
@@ -52,7 +51,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
             List<Metadata> directory = videoManager.loadById(videoFolderId);
 
             if (directory.size() != 1) {
-                logger.error("Could not find video based on provided id!");
+                log.error("Could not find video based on provided id!");
                 showErrorNotification("Could not find details!");
                 return;
             }
@@ -67,7 +66,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
 
             add(heroSection, contentSection);
         } catch (Exception e) {
-            logger.error("Could not load details!", e);
+            log.error("Could not load details!", e);
             showErrorNotification("Could not load details!");
         }
     }
@@ -262,7 +261,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                     if (video != null && !video.isEmpty()) {
                         sortedEpisodesFolders.add(videoFolder);
                     } else {
-                        logger.error("Episode folder is empty! " + metadata.getPath() + File.separator + metadata.getFilename());
+                        log.error("Episode folder is empty! " + metadata.getPath() + File.separator + metadata.getFilename());
                     }
                 }
             }
@@ -340,7 +339,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
 
                         scrollingLayout.add(tile);
                     } catch (Exception e) {
-                        logger.error("Unable to load video!", e);
+                        log.error("Unable to load video!", e);
                         showErrorNotification("Unable to load video!");
                     }
                     videoCounter++;

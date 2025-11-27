@@ -1,6 +1,5 @@
 package com.bervan.streamingapp.view;
 
-import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.UI;
@@ -11,18 +10,18 @@ import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
 @Route(AbstractVideoListView.ROUTE_NAME)
+@Slf4j
 public abstract class AbstractVideoListView extends AbstractRemoteControlSupportedView {
     public static final String ROUTE_NAME = "/streaming-platform";
-    private final BervanLogger logger;
     private final VideoManager videoManager;
 
-    public AbstractVideoListView(BervanLogger logger, VideoManager videoManager) {
+    public AbstractVideoListView(VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
-        this.logger = logger;
         this.videoManager = videoManager;
 
         Div scrollableLayoutParent = getScrollableLayoutParent();
@@ -50,7 +49,7 @@ public abstract class AbstractVideoListView extends AbstractRemoteControlSupport
                 );
                 scrollingLayout.add(tile);
             } catch (Exception e) {
-                logger.error("Unable to load video!", e);
+                log.error("Unable to load video!", e);
                 showErrorNotification("Unable to load video!");
             }
         }

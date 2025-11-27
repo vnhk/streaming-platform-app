@@ -2,7 +2,6 @@ package com.bervan.streamingapp.view;
 
 import com.bervan.common.component.BervanButton;
 import com.bervan.common.service.AuthService;
-import com.bervan.core.model.BervanLogger;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
@@ -18,20 +17,20 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/video-player";
     protected final HorizontalLayout topLayout = new HorizontalLayout();
-    private final BervanLogger logger;
     private final VideoManager videoManager;
 
-    public AbstractVideoPlayerView(BervanLogger logger, VideoManager videoManager) {
+    public AbstractVideoPlayerView( VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
-        this.logger = logger;
         this.videoManager = videoManager;
     }
 
@@ -45,7 +44,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
         try {
             List<Metadata> video = videoManager.loadById(videoId);
             if (video.size() != 1) {
-                logger.error("Could not find video based on provided id!");
+                log.error("Could not find video based on provided id!");
                 showErrorNotification("Could not find video!");
                 return;
             }
@@ -239,7 +238,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                     currentVideoTime // $2
             );
         } catch (Exception e) {
-            logger.error("Could not load video!", e);
+            log.error("Could not load video!", e);
             showErrorNotification("Could not load video!");
         }
     }
