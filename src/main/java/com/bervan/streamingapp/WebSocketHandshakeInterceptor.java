@@ -1,6 +1,6 @@
 package com.bervan.streamingapp;
 
-import lombok.extern.slf4j.Slf4j;
+import com.bervan.logging.JsonLogger;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.socket.WebSocketHandler;
@@ -9,8 +9,9 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import java.net.URI;
 import java.util.Map;
 
-@Slf4j
 public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
+
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) throws Exception {

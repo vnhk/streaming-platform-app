@@ -7,8 +7,8 @@ import com.bervan.common.search.model.SearchOperation;
 import com.bervan.common.search.model.SearchResponse;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
+import com.bervan.logging.JsonLogger;
 import jakarta.validation.constraints.NotNull;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -24,13 +24,11 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
-@Slf4j
 public class VideoManager {
     private static final List<String> subtitleSeparator = List.of(".", "_", "-", " ");
     private static final List<String> polSubtitles = List.of("pl", "pol", "polish");
     private static final List<String> engSubtitles = List.of("en", "eng", "english");
     private static final Map<String, List<String>> subtitlesParts = new HashMap<>();
-
     public static String PL = "pl";
     public static String EN = "en";
 
@@ -39,6 +37,7 @@ public class VideoManager {
         subtitlesParts.put(EN, engSubtitles);
     }
 
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
     private final WatchDetailsRepository watchDetailsRepository;
     private final List<String> supportedExtensions = Arrays.asList("mp4");
     private final SearchService searchService;

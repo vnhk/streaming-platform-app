@@ -3,6 +3,7 @@ package com.bervan.streamingapp.view;
 import com.bervan.common.component.BervanButton;
 import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
 import com.vaadin.flow.component.ClientCallable;
@@ -17,19 +18,18 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-@Slf4j
 public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/video-player";
     protected final HorizontalLayout topLayout = new HorizontalLayout();
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
     private final VideoManager videoManager;
 
-    public AbstractVideoPlayerView( VideoManager videoManager) {
+    public AbstractVideoPlayerView(VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
         this.videoManager = videoManager;
     }

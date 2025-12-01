@@ -1,7 +1,7 @@
 package com.bervan.streamingapp;
 
 
-import lombok.extern.slf4j.Slf4j;
+import com.bervan.logging.JsonLogger;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 
@@ -9,8 +9,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-@Slf4j
 public class RemoteControlWebSocketHandler implements WebSocketHandler {
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
 
     private final Map<String, WebSocketSession> tvSessions = new ConcurrentHashMap<>();
     private final Map<String, WebSocketSession> remoteSessions = new ConcurrentHashMap<>();

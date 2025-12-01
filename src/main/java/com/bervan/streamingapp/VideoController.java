@@ -1,7 +1,7 @@
 package com.bervan.streamingapp;
 
 import com.bervan.filestorage.model.Metadata;
-import lombok.extern.slf4j.Slf4j;
+import com.bervan.logging.JsonLogger;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -17,9 +17,9 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/storage/videos")
-@Slf4j
 public class VideoController {
     private final VideoManager videoManager;
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
 
     public VideoController(VideoManager videoManager) {
         this.videoManager = videoManager;

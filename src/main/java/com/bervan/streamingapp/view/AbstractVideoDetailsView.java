@@ -1,6 +1,7 @@
 package com.bervan.streamingapp.view;
 
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -13,19 +14,18 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
-import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Slf4j
 public abstract class AbstractVideoDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
     private final VideoManager videoManager;
 
-    public AbstractVideoDetailsView( VideoManager videoManager) {
+    public AbstractVideoDetailsView(VideoManager videoManager) {
         super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME);
         this.videoManager = videoManager;
         setupViewStyles();

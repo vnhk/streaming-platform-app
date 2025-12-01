@@ -1,6 +1,7 @@
 package com.bervan.streamingapp.view;
 
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -9,15 +10,12 @@ import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.router.Route;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
-@Route(AbstractVideoListView.ROUTE_NAME)
-@Slf4j
 public abstract class AbstractVideoListView extends AbstractRemoteControlSupportedView {
     public static final String ROUTE_NAME = "/streaming-platform";
+    private final JsonLogger log = JsonLogger.getLogger(getClass());
     private final VideoManager videoManager;
 
     public AbstractVideoListView(VideoManager videoManager) {
