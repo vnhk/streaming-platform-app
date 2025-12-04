@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 
 public abstract class AbstractVideoDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
 
     public AbstractVideoDetailsView(VideoManager videoManager) {

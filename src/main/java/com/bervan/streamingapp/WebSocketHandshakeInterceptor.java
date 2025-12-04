@@ -10,7 +10,7 @@ import java.net.URI;
 import java.util.Map;
 
 public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,

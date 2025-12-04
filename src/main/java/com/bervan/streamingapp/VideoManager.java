@@ -37,7 +37,7 @@ public class VideoManager {
         subtitlesParts.put(EN, engSubtitles);
     }
 
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final WatchDetailsRepository watchDetailsRepository;
     private final List<String> supportedExtensions = Arrays.asList("mp4");
     private final SearchService searchService;

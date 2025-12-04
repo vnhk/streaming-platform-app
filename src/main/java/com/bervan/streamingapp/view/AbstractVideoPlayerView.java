@@ -26,7 +26,7 @@ import java.util.UUID;
 public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/video-player";
     protected final HorizontalLayout topLayout = new HorizontalLayout();
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
 
     public AbstractVideoPlayerView(VideoManager videoManager) {

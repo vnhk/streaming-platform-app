@@ -15,7 +15,7 @@ import java.util.List;
 
 public abstract class AbstractVideoListView extends AbstractRemoteControlSupportedView {
     public static final String ROUTE_NAME = "/streaming-platform";
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
 
     public AbstractVideoListView(VideoManager videoManager) {

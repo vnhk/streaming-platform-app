@@ -19,7 +19,7 @@ import java.util.Optional;
 @RequestMapping("/storage/videos")
 public class VideoController {
     private final VideoManager videoManager;
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
 
     public VideoController(VideoManager videoManager) {
         this.videoManager = videoManager;

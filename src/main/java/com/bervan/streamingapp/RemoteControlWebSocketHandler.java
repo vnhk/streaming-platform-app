@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class RemoteControlWebSocketHandler implements WebSocketHandler {
-    private final JsonLogger log = JsonLogger.getLogger(getClass());
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
 
     private final Map<String, WebSocketSession> tvSessions = new ConcurrentHashMap<>();
     private final Map<String, WebSocketSession> remoteSessions = new ConcurrentHashMap<>();
