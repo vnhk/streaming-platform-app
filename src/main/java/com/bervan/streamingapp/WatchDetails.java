@@ -1,7 +1,7 @@
 package com.bervan.streamingapp;
 
 
-import com.bervan.common.model.BervanBaseEntity;
+import com.bervan.common.model.BervanOwnedBaseEntity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-public class WatchDetails extends BervanBaseEntity<UUID> {
+public class WatchDetails extends BervanOwnedBaseEntity<UUID> {
     @Id
     private UUID id;
     private UUID videoId;
