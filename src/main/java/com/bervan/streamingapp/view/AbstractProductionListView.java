@@ -36,6 +36,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     private MultiSelectComboBox<String> tagFilter;
     private ComboBox<String> yearFilter;
     private ComboBox<String> ratingFilter;
+    private ComboBox<String> audioLangFilter;
 
     // Content containers
     private VerticalLayout contentContainer;
@@ -210,6 +211,19 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         countryFilter.addSelectionListener(e -> applyFilters());
         countryFilter.getStyle().set("min-width", "180px");
 
+        // Audio Language filter
+        audioLangFilter = new ComboBox<>("Audio Language");
+        Set<String> allAudioLangs = streamingProductionData.values().stream()
+                .map(ProductionData::getProductionDetails)
+                .filter(Objects::nonNull)
+                .map(ProductionDetails::getAudioLang)
+                .filter(Objects::nonNull)
+                .filter(audioLang -> !audioLang.isBlank())
+                .collect(Collectors.toSet());
+        audioLangFilter.setItems(allAudioLangs);
+        audioLangFilter.addValueChangeListener(e -> applyFilters());
+        audioLangFilter.getStyle().set("min-width", "150px");
+
         // Year filter
         yearFilter = new ComboBox<>("Release Year");
         Set<String> years = streamingProductionData.values().stream()
@@ -231,7 +245,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         ratingFilter.addValueChangeListener(e -> applyFilters());
         ratingFilter.getStyle().set("min-width", "130px");
 
-        filterLayout.add(typeFilter, categoryFilter, tagFilter, countryFilter, yearFilter, ratingFilter);
+        filterLayout.add(typeFilter, categoryFilter, tagFilter, countryFilter, audioLangFilter, yearFilter, ratingFilter);
 
         return filterLayout;
     }
@@ -264,6 +278,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         Set<String> selectedCategories = categoryFilter.getSelectedItems();
         Set<String> selectedTags = tagFilter.getSelectedItems();
         Set<String> selectedCountries = countryFilter.getSelectedItems();
+        String selectedAudioLang = audioLangFilter.getValue();
         String selectedYear = yearFilter.getValue();
         String selectedRating = ratingFilter.getValue();
 
@@ -273,12 +288,21 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 .filter(data -> matchesCategories(data, selectedCategories))
                 .filter(data -> matchesTags(data, selectedTags))
                 .filter(data -> matchesCountries(data, selectedCountries))
+                .filter(data -> matchesAudioLang(data, selectedAudioLang))
                 .filter(data -> matchesYear(data, selectedYear))
                 .filter(data -> matchesRating(data, selectedRating))
                 .collect(Collectors.toList());
 
         refreshFilteredContent(filteredData);
     }
+
+    private boolean matchesAudioLang(ProductionData data, String selectedAudioLang) {
+        if (selectedAudioLang == null) return true;
+        ProductionDetails details = data.getProductionDetails();
+        return details != null && details.getAudioLang() != null &&
+                details.getAudioLang().equals(selectedAudioLang);
+    }
+
 
     private boolean matchesSearchTerm(ProductionData data, String searchTerm) {
         if (searchTerm.isEmpty()) return true;
