@@ -98,33 +98,6 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         tile.addClassName("modern-movie-tile");
         tile.setSpacing(false);
         tile.setPadding(false);
-        tile.getStyle()
-                .set("margin", "0 15px 0 0")
-                .set("cursor", "pointer")
-                .set("display", "inline-block")
-                .set("min-width", "280px")
-                .set("width", "280px")
-                .set("height", "300px")
-                .set("border-radius", "12px")
-                .set("overflow", "hidden")
-                .set("background", "white")
-                .set("box-shadow", "0 8px 32px rgba(0,0,0,0.12)")
-                .set("transition", "all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)")
-                .set("transform", "translateY(0)")
-                .set("border", "1px solid rgba(0,0,0,0.1)")
-                .set("flex-shrink", "0");
-
-        // Add hover effect
-        tile.getElement().executeJs(
-                "this.addEventListener('mouseenter', () => {" +
-                        "this.style.transform = 'translateY(-8px)';" +
-                        "this.style.boxShadow = '0 20px 40px rgba(0,0,0,0.2)';" +
-                        "});" +
-                        "this.addEventListener('mouseleave', () => {" +
-                        "this.style.transform = 'translateY(0)';" +
-                        "this.style.boxShadow = '0 8px 32px rgba(0,0,0,0.12)';" +
-                        "});"
-        );
 
         return tile;
     }
