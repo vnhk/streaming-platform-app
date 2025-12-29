@@ -102,18 +102,9 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         return tile;
     }
 
-
     protected H4 getModernTitle(String value) {
         H4 title = new H4(value);
-        title.getStyle()
-                .set("text-align", "center")
-                .set("margin", "15px 0 0 0")
-                .set("color", "#333")
-                .set("font-size", "1rem")
-                .set("font-weight", "500")
-                .set("overflow", "hidden")
-                .set("text-overflow", "ellipsis")
-                .set("white-space", "nowrap");
+        title.addClassName("modern-movie-title");
         return title;
     }
 
