@@ -1,5 +1,7 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.common.component.BervanButton;
+import com.bervan.common.component.BervanButtonStyle;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
@@ -115,8 +117,9 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         filterSection.setPadding(false);
         filterSection.setSpacing(true);
         filterSection.setWidthFull();
+        filterSection.addClassName("search-filter-section");
         filterSection.getStyle()
-                .set("background", "var(--streaming-tile-background)")
+                .set("background-color", "var(--streaming-tile-background)")
                 .set("border-radius", "12px")
                 .set("padding", "20px")
                 .set("margin-bottom", "20px")
@@ -254,16 +257,13 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         HorizontalLayout buttonLayout = new HorizontalLayout();
         buttonLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
 
-        Button clearFilters = new Button("Clear Filters", new Icon(VaadinIcon.REFRESH));
-        clearFilters.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+        Button clearFilters = new BervanButton("Clear Filters", new Icon(VaadinIcon.REFRESH), BervanButtonStyle.SECONDARY);
         clearFilters.addClickListener(e -> clearAllFiltersAndShowDefault());
 
-        Button sortByRating = new Button("Sort by Rating", new Icon(VaadinIcon.STAR));
-        sortByRating.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        Button sortByRating = new BervanButton("Sort by Rating", new Icon(VaadinIcon.STAR));
         sortByRating.addClickListener(e -> sortByRating());
 
-        Button sortByYear = new Button("Sort by Year", new Icon(VaadinIcon.CALENDAR));
-        sortByYear.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        Button sortByYear = new BervanButton("Sort by Year", new Icon(VaadinIcon.CALENDAR));
         sortByYear.addClickListener(e -> sortByYear());
 
         buttonLayout.add(clearFilters, sortByRating, sortByYear);

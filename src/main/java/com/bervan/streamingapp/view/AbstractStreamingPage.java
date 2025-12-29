@@ -169,7 +169,7 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         Div result = new Div();
         result.addClassName("scrollable-layout-parent");
         result.getStyle()
-                .set("background", "rgba(255,255,255,0.95)")
+                .set("background", "var(--streaming-tile-background)")
                 .set("backdrop-filter", "blur(10px)")
                 .set("border-radius", "20px 20px 0 0")
                 .set("margin-top", "-20px")
