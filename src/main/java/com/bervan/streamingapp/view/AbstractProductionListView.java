@@ -1,4 +1,3 @@
-
 package com.bervan.streamingapp.view;
 
 import com.bervan.filestorage.model.Metadata;
@@ -20,8 +19,6 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,21 +30,24 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
 
     // Search and filter components
     private TextField searchField;
-    private ComboBox<ProductionDetails.VideoType> typeFilter;
+    private MultiSelectComboBox<ProductionDetails.VideoType> typeFilter;
     private MultiSelectComboBox<String> categoryFilter;
     private MultiSelectComboBox<String> countryFilter;
+    private MultiSelectComboBox<String> tagFilter;
     private ComboBox<String> yearFilter;
     private ComboBox<String> ratingFilter;
 
     // Content containers
     private VerticalLayout contentContainer;
-    private List<ProductionData> filteredData;
+    private VerticalLayout searchSection;
+    private Button searchToggleButton;
+    private boolean searchExpanded = false;
+    private boolean filtersActive = false;
 
     public AbstractProductionListView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
         super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         this.videoManager = videoManager;
         this.streamingProductionData = streamingProductionData;
-        this.filteredData = new ArrayList<>(streamingProductionData.values());
 
         initializeView();
     }
@@ -55,8 +55,13 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     private void initializeView() {
         Div scrollableLayoutParent = getScrollableLayoutParent();
 
-        // Add search and filter section
-        scrollableLayoutParent.add(createSearchAndFilterSection());
+        // Add search toggle and filter section
+        scrollableLayoutParent.add(createSearchToggleSection());
+
+        // Add collapsible search section (hidden by default)
+        searchSection = createSearchAndFilterSection();
+        searchSection.setVisible(false);
+        scrollableLayoutParent.add(searchSection);
 
         // Add content container
         contentContainer = new VerticalLayout();
@@ -66,10 +71,42 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
 
         scrollableLayoutParent.add(contentContainer);
 
-        // Initial load of content
-        refreshContent();
+        // Initial load of content (default view)
+        showDefaultContent();
 
         add(scrollableLayoutParent, new Hr());
+    }
+
+    private HorizontalLayout createSearchToggleSection() {
+        HorizontalLayout toggleSection = new HorizontalLayout();
+        toggleSection.setWidthFull();
+        toggleSection.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        toggleSection.setAlignItems(FlexComponent.Alignment.CENTER);
+        toggleSection.getStyle()
+                .set("padding", "10px 20px")
+                .set("margin-bottom", "10px");
+
+        H3 title = new H3("Discover Movies & TV Series");
+
+        searchToggleButton = new Button("Search & Filters", new Icon(VaadinIcon.SEARCH));
+        searchToggleButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        searchToggleButton.addClickListener(e -> toggleSearchSection());
+
+        toggleSection.add(title, searchToggleButton);
+        return toggleSection;
+    }
+
+    private void toggleSearchSection() {
+        searchExpanded = !searchExpanded;
+        searchSection.setVisible(searchExpanded);
+
+        if (searchExpanded) {
+            searchToggleButton.setText("Hide Search & Filters");
+            searchToggleButton.setIcon(new Icon(VaadinIcon.ANGLE_UP));
+        } else {
+            searchToggleButton.setText("Search & Filters");
+            searchToggleButton.setIcon(new Icon(VaadinIcon.SEARCH));
+        }
     }
 
     private VerticalLayout createSearchAndFilterSection() {
@@ -93,13 +130,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         // Action buttons
         HorizontalLayout actionButtons = createActionButtons();
 
-        filterSection.add(
-                new H3("Discover Movies & TV Series"),
-                searchLayout,
-                filterControls,
-                actionButtons
-        );
-
+        filterSection.add(searchLayout, filterControls, actionButtons);
         return filterSection;
     }
 
@@ -130,12 +161,12 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         filterLayout.getStyle().set("flex-wrap", "wrap");
         filterLayout.getStyle().set("gap", "10px");
 
-        // Type filter
-        typeFilter = new ComboBox<>("Type");
+        // Type filter (multiple selection)
+        typeFilter = new MultiSelectComboBox<>("Types");
         typeFilter.setItems(ProductionDetails.VideoType.values());
         typeFilter.setItemLabelGenerator(type ->
                 type.name().replace("_", " ").toLowerCase().replace("tv", "TV"));
-        typeFilter.addValueChangeListener(e -> applyFilters());
+        typeFilter.addSelectionListener(e -> applyFilters());
         typeFilter.getStyle().set("min-width", "150px");
 
         // Category filter
@@ -146,12 +177,27 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 .map(ProductionDetails::getCategories)
                 .filter(Objects::nonNull)
                 .flatMap(List::stream)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         categoryFilter.setItems(allCategories);
         categoryFilter.addSelectionListener(e -> applyFilters());
         categoryFilter.getStyle().set("min-width", "200px");
 
-        // Country filter
+        // Tags filter
+        tagFilter = new MultiSelectComboBox<>("Tags");
+        Set<String> allTags = streamingProductionData.values().stream()
+                .map(ProductionData::getProductionDetails)
+                .filter(Objects::nonNull)
+                .map(ProductionDetails::getTags)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        tagFilter.setItems(allTags);
+        tagFilter.addSelectionListener(e -> applyFilters());
+        tagFilter.getStyle().set("min-width", "180px");
+
+        // Country filter (multiple selection)
         countryFilter = new MultiSelectComboBox<>("Countries");
         Set<String> allCountries = streamingProductionData.values().stream()
                 .map(ProductionData::getProductionDetails)
@@ -185,7 +231,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         ratingFilter.addValueChangeListener(e -> applyFilters());
         ratingFilter.getStyle().set("min-width", "130px");
 
-        filterLayout.add(typeFilter, categoryFilter, countryFilter, yearFilter, ratingFilter);
+        filterLayout.add(typeFilter, categoryFilter, tagFilter, countryFilter, yearFilter, ratingFilter);
 
         return filterLayout;
     }
@@ -196,7 +242,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
 
         Button clearFilters = new Button("Clear Filters", new Icon(VaadinIcon.REFRESH));
         clearFilters.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
-        clearFilters.addClickListener(e -> clearAllFilters());
+        clearFilters.addClickListener(e -> clearAllFiltersAndShowDefault());
 
         Button sortByRating = new Button("Sort by Rating", new Icon(VaadinIcon.STAR));
         sortByRating.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -211,23 +257,27 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     }
 
     private void applyFilters() {
+        filtersActive = true;
+
         String searchTerm = searchField.getValue() != null ? searchField.getValue().toLowerCase().trim() : "";
-        ProductionDetails.VideoType selectedType = typeFilter.getValue();
+        Set<ProductionDetails.VideoType> selectedTypes = typeFilter.getSelectedItems();
         Set<String> selectedCategories = categoryFilter.getSelectedItems();
+        Set<String> selectedTags = tagFilter.getSelectedItems();
         Set<String> selectedCountries = countryFilter.getSelectedItems();
         String selectedYear = yearFilter.getValue();
         String selectedRating = ratingFilter.getValue();
 
-        filteredData = streamingProductionData.values().stream()
+        List<ProductionData> filteredData = streamingProductionData.values().stream()
                 .filter(data -> matchesSearchTerm(data, searchTerm))
-                .filter(data -> matchesType(data, selectedType))
+                .filter(data -> matchesTypes(data, selectedTypes))
                 .filter(data -> matchesCategories(data, selectedCategories))
+                .filter(data -> matchesTags(data, selectedTags))
                 .filter(data -> matchesCountries(data, selectedCountries))
                 .filter(data -> matchesYear(data, selectedYear))
                 .filter(data -> matchesRating(data, selectedRating))
                 .collect(Collectors.toList());
 
-        refreshContent();
+        refreshFilteredContent(filteredData);
     }
 
     private boolean matchesSearchTerm(ProductionData data, String searchTerm) {
@@ -242,10 +292,10 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                         .anyMatch(tag -> tag.toLowerCase().contains(searchTerm)));
     }
 
-    private boolean matchesType(ProductionData data, ProductionDetails.VideoType selectedType) {
-        if (selectedType == null) return true;
+    private boolean matchesTypes(ProductionData data, Set<ProductionDetails.VideoType> selectedTypes) {
+        if (selectedTypes.isEmpty()) return true;
         ProductionDetails details = data.getProductionDetails();
-        return details != null && selectedType.equals(details.getType());
+        return details != null && selectedTypes.contains(details.getType());
     }
 
     private boolean matchesCategories(ProductionData data, Set<String> selectedCategories) {
@@ -253,6 +303,13 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         ProductionDetails details = data.getProductionDetails();
         if (details == null || details.getCategories() == null) return false;
         return details.getCategories().stream().anyMatch(selectedCategories::contains);
+    }
+
+    private boolean matchesTags(ProductionData data, Set<String> selectedTags) {
+        if (selectedTags.isEmpty()) return true;
+        ProductionDetails details = data.getProductionDetails();
+        if (details == null || details.getTags() == null) return false;
+        return details.getTags().stream().anyMatch(selectedTags::contains);
     }
 
     private boolean matchesCountries(ProductionData data, Set<String> selectedCountries) {
@@ -278,36 +335,73 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         return details.getRating() >= minRating;
     }
 
-    private void clearAllFilters() {
+    private void clearAllFiltersAndShowDefault() {
         searchField.clear();
         typeFilter.clear();
         categoryFilter.clear();
+        tagFilter.clear();
         countryFilter.clear();
         yearFilter.clear();
         ratingFilter.clear();
-        filteredData = new ArrayList<>(streamingProductionData.values());
-        refreshContent();
+        filtersActive = false;
+        showDefaultContent();
     }
 
     private void sortByRating() {
-        filteredData.sort((a, b) -> {
-            Double ratingA = a.getProductionDetails() != null ? a.getProductionDetails().getRating() : 0.0;
-            Double ratingB = b.getProductionDetails() != null ? b.getProductionDetails().getRating() : 0.0;
-            return Double.compare(ratingB != null ? ratingB : 0.0, ratingA != null ? ratingA : 0.0);
-        });
-        refreshContent();
+        // This will only work if filters are active
+        if (filtersActive) {
+            applyFilters();
+        }
     }
 
     private void sortByYear() {
-        filteredData.sort((a, b) -> {
-            Integer yearA = a.getProductionDetails() != null ? a.getProductionDetails().getReleaseYearStart() : 0;
-            Integer yearB = b.getProductionDetails() != null ? b.getProductionDetails().getReleaseYearStart() : 0;
-            return Integer.compare(yearB != null ? yearB : 0, yearA != null ? yearA : 0);
-        });
-        refreshContent();
+        // This will only work if filters are active
+        if (filtersActive) {
+            applyFilters();
+        }
     }
 
-    private void refreshContent() {
+    private void showDefaultContent() {
+        contentContainer.removeAll();
+
+        // Group productions by categories and sort by count
+        Map<String, List<ProductionData>> productionsByCategory = new LinkedHashMap<>();
+
+        // Collect all productions grouped by their categories
+        for (ProductionData data : streamingProductionData.values()) {
+            ProductionDetails details = data.getProductionDetails();
+            if (details != null && details.getCategories() != null) {
+                for (String category : details.getCategories()) {
+                    productionsByCategory.computeIfAbsent(category, k -> new ArrayList<>()).add(data);
+                }
+            } else {
+                // Add to "Uncategorized" if no categories
+                productionsByCategory.computeIfAbsent("Uncategorized", k -> new ArrayList<>()).add(data);
+            }
+        }
+
+        // Sort categories by production count (descending)
+        List<Map.Entry<String, List<ProductionData>>> sortedCategories = productionsByCategory.entrySet()
+                .stream()
+                .sorted((e1, e2) -> Integer.compare(e2.getValue().size(), e1.getValue().size()))
+                .collect(Collectors.toList());
+
+        // Create sections for each category
+        for (Map.Entry<String, List<ProductionData>> categoryEntry : sortedCategories) {
+            String categoryName = categoryEntry.getKey();
+            List<ProductionData> productions = categoryEntry.getValue();
+
+            if (!productions.isEmpty()) {
+                String sectionTitle = "📂 " + categoryName + " (" + productions.size() + ")";
+                contentContainer.add(createModernScrollableSection(
+                        sectionTitle,
+                        createVideoLayout(productions, ROUTE_NAME + "/details/")
+                ));
+            }
+        }
+    }
+
+    private void refreshFilteredContent(List<ProductionData> filteredData) {
         contentContainer.removeAll();
 
         if (filteredData.isEmpty()) {
@@ -344,40 +438,6 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
             contentContainer.add(createModernScrollableSection(
                     "🎭 Other (" + others.size() + ")",
                     createVideoLayout(others, ROUTE_NAME + "/details/")
-            ));
-        }
-
-        // Add recently added section (last 10 items by creation/modification date)
-        List<ProductionData> recentlyAdded = filteredData.stream()
-                .sorted((a, b) -> Long.compare(
-                        b.getMainFolder().getCreateDate() != null ? b.getMainFolder().getCreateDate().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : 0,
-                        a.getMainFolder().getCreateDate() != null ? a.getMainFolder().getCreateDate().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : 0
-                ))
-                .limit(10)
-                .collect(Collectors.toList());
-
-        if (!recentlyAdded.isEmpty()) {
-            contentContainer.add(createModernScrollableSection(
-                    "🆕 Recently Added",
-                    createVideoLayout(recentlyAdded, ROUTE_NAME + "/details/")
-            ));
-        }
-
-        // Add high-rated section
-        List<ProductionData> highRated = filteredData.stream()
-                .filter(data -> data.getProductionDetails() != null &&
-                        data.getProductionDetails().getRating() != null &&
-                        data.getProductionDetails().getRating() >= 8.0)
-                .sorted((a, b) -> Double.compare(
-                        b.getProductionDetails().getRating(),
-                        a.getProductionDetails().getRating()))
-                .limit(15)
-                .collect(Collectors.toList());
-
-        if (!highRated.isEmpty()) {
-            contentContainer.add(createModernScrollableSection(
-                    "⭐ Highly Rated (8.0+)",
-                    createVideoLayout(highRated, ROUTE_NAME + "/details/")
             ));
         }
     }
