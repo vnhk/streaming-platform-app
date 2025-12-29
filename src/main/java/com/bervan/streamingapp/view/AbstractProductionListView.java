@@ -5,8 +5,8 @@ import com.bervan.common.component.BervanButtonStyle;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
-import com.bervan.streamingapp.conifg.ProductionData;
-import com.bervan.streamingapp.conifg.ProductionDetails;
+import com.bervan.streamingapp.config.ProductionData;
+import com.bervan.streamingapp.config.ProductionDetails;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -56,6 +56,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     }
 
     private void initializeView() {
+        log.info("Initializing production list view for {}", streamingProductionData.size());
         Div scrollableLayoutParent = getScrollableLayoutParent();
 
         // Add search toggle and filter section

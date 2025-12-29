@@ -6,7 +6,7 @@ import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
-import com.bervan.streamingapp.conifg.ProductionData;
+import com.bervan.streamingapp.config.ProductionData;
 import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;

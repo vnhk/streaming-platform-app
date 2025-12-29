@@ -1,4 +1,4 @@
-package com.bervan.streamingapp.conifg;
+package com.bervan.streamingapp.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

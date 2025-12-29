@@ -1,4 +1,4 @@
-package com.bervan.streamingapp.conifg;
+package com.bervan.streamingapp.config;
 
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
