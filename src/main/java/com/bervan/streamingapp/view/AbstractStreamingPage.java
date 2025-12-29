@@ -98,6 +98,8 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         tile.addClassName("modern-movie-tile");
         tile.setSpacing(false);
         tile.setPadding(false);
+        tile.setWidth("280px");
+        tile.setHeight("350px");
 
         return tile;
     }
