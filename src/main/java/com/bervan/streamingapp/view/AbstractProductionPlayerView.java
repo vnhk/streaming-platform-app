@@ -6,6 +6,7 @@ import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
+import com.bervan.streamingapp.conifg.ProductionData;
 import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
@@ -19,19 +20,22 @@ import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
-import java.util.List;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
+public abstract class AbstractProductionPlayerView extends AbstractRemoteControlSupportedView implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/video-player";
     protected final HorizontalLayout topLayout = new HorizontalLayout();
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
+    private final Map<String, ProductionData> streamingProductionData;
 
-    public AbstractVideoPlayerView(VideoManager videoManager) {
-        super(ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
+    public AbstractProductionPlayerView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
+        super(ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         this.videoManager = videoManager;
+        this.streamingProductionData = streamingProductionData;
     }
 
     @Override
@@ -42,28 +46,34 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
 
     private void init(String videoId) {
         try {
-            List<Metadata> video = videoManager.loadById(videoId);
-            if (video.size() != 1) {
-                log.error("Could not find video based on provided id!");
+            Optional<Metadata> videoOptional = streamingProductionData.values().stream().map(e -> e.getProductionFolders().values()).flatMap(Collection::stream)
+                    .flatMap(Collection::stream).filter(e -> e.getId().toString().equals(videoId)).findFirst();
+
+            if (videoOptional.isEmpty()) {
+                log.error("Could not find video based on provided id: ", videoId);
                 showErrorNotification("Could not find video!");
                 return;
             }
+            Metadata video = videoOptional.get();
 
-            Metadata mainDirectory = videoManager.getMainMovieFolder(video.get(0));
+            Optional<ProductionData> mainDirectory = streamingProductionData.values().stream().filter(e -> e.getMainFolder().getId()
+                            .equals(video.getId()))
+                    .findFirst();
 
             add(topLayout);
-            if (mainDirectory != null) {
-                Button detailsButton = new Button(mainDirectory.getFilename() + " - Details");
+            if (mainDirectory.isPresent()) {
+                ProductionData productionData = mainDirectory.get();
+                Button detailsButton = new Button(productionData.getProductionName() + " - Details");
                 detailsButton.addClassName("option-button");
                 detailsButton.addClickListener(click ->
-                        UI.getCurrent().navigate("/streaming-platform/details/" + mainDirectory.getId())
+                        UI.getCurrent().navigate("/streaming-platform/details/" + productionData.getProductionId())
                 );
 
                 topLayout.add(detailsButton);
             }
 
-            Optional<Metadata> prevVideo = videoManager.getPrevVideo(video.get(0));
-            Optional<Metadata> nextVideo = videoManager.getNextVideo(video.get(0));
+            Optional<Metadata> prevVideo = videoManager.getPrevVideo(video);
+            Optional<Metadata> nextVideo = videoManager.getNextVideo(video);
 
             if (prevVideo.isPresent()) {
                 Button prevButton = new Button("Previous episode");
@@ -83,7 +93,7 @@ public abstract class AbstractVideoPlayerView extends AbstractRemoteControlSuppo
                 topLayout.add(nextButton);
             }
 
-            add(new Hr(), new H4("Video: " + video.get(0).getFilename()));
+            add(new Hr(), new H4("Video: " + video.getFilename()));
 
             setSizeFull();
             setSpacing(false);

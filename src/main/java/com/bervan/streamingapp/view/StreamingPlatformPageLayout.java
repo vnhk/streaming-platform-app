@@ -10,9 +10,9 @@ public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
     public StreamingPlatformPageLayout(String routeName, String... notVisibleButtonRoutes) {
         super(routeName, notVisibleButtonRoutes);
 
-        addButtonIfVisible(menuButtonsRow, AbstractVideoListView.ROUTE_NAME, "Home", VaadinIcon.HOME.create());
-        addButtonIfVisible(menuButtonsRow, AbstractVideoDetailsView.ROUTE_NAME, "Details", VaadinIcon.FILE_TEXT.create());
-        addButtonIfVisible(menuButtonsRow, AbstractVideoPlayerView.ROUTE_NAME, "Player", VaadinIcon.PLAY_CIRCLE.create());
+        addButtonIfVisible(menuButtonsRow, AbstractProductionListView.ROUTE_NAME, "Home", VaadinIcon.HOME.create());
+        addButtonIfVisible(menuButtonsRow, AbstractProductionDetailsView.ROUTE_NAME, "Details", VaadinIcon.FILE_TEXT.create());
+        addButtonIfVisible(menuButtonsRow, AbstractProductionPlayerView.ROUTE_NAME, "Player", VaadinIcon.PLAY_CIRCLE.create());
         if (AuthService.getUserRole().equals("ROLE_USER")) {
             addButtonIfVisible(menuButtonsRow, AbstractRemoteControlView.ROUTE_NAME, "Remote Control", VaadinIcon.CONTROLLER.create());
         }

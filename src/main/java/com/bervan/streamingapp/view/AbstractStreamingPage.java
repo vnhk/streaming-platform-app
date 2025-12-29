@@ -144,14 +144,14 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         return title;
     }
 
-    protected Image getModernImage(String text, String imageSrc, List<Metadata> defaultPoster) {
+    protected Image getModernImage(String altText, String imageSrc, List<Metadata> defaultPoster) {
         String fallbackImageSrc;
         if (defaultPoster != null && !defaultPoster.isEmpty()) {
             fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
         } else {
             fallbackImageSrc = "images/no_video_image.png";
         }
-        Image image = new Image(imageSrc, text);
+        Image image = new Image(imageSrc, altText);
         image.setWidth("100%");
         image.setHeight("240px");
         image.getStyle()

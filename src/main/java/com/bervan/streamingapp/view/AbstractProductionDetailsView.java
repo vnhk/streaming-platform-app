@@ -3,6 +3,8 @@ package com.bervan.streamingapp.view;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
+import com.bervan.streamingapp.conifg.ProductionData;
+import com.bervan.streamingapp.conifg.ProductionDetails;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -20,14 +22,16 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public abstract class AbstractVideoDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
+public abstract class AbstractProductionDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
+    private final Map<String, ProductionData> streamingProductionData;
 
-    public AbstractVideoDetailsView(VideoManager videoManager) {
-        super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME);
+    public AbstractProductionDetailsView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
+        super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME);
         this.videoManager = videoManager;
+        this.streamingProductionData = streamingProductionData;
         setupViewStyles();
     }
 
@@ -48,21 +52,19 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
     protected void init(String videoFolderId) {
         try {
             // Load the root folder
-            List<Metadata> directory = videoManager.loadById(videoFolderId);
-
-            if (directory.size() != 1) {
-                log.error("Could not find video based on provided id!");
+            Optional<ProductionData> optionalProduction = streamingProductionData.values().stream()
+                    .filter(e -> e.getProductionId().equals(videoFolderId)).findFirst();
+            if (optionalProduction.isEmpty()) {
+                log.error("Could not find production based on provided id!");
                 showErrorNotification("Could not find details!");
                 return;
             }
 
-            Metadata rootFolder = directory.get(0);
-
             // Create hero section
-            VerticalLayout heroSection = createHeroSection(rootFolder);
+            VerticalLayout heroSection = createHeroSection(optionalProduction.get());
 
             // Create content section
-            Div contentSection = buildDetails(rootFolder);
+            Div contentSection = buildDetails(optionalProduction.get());
 
             add(heroSection, contentSection);
         } catch (Exception e) {
@@ -71,12 +73,12 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         }
     }
 
-    private VerticalLayout createHeroSection(Metadata rootFolder) {
+    private VerticalLayout createHeroSection(ProductionData productionData) {
         VerticalLayout heroSection = new VerticalLayout();
         heroSection.setWidthFull();
         heroSection.setAlignItems(FlexComponent.Alignment.CENTER);
         heroSection.getStyle()
-                .set("background", "linear-gradient(var(--streaming-overlay-background), var(--streaming-overlay-background)), url('/storage/videos/poster/" + rootFolder.getId() + "')")
+                .set("background", "linear-gradient(var(--streaming-overlay-background), var(--streaming-overlay-background)), url('/storage/videos/poster/" + productionData.getProductionId() + "')")
                 .set("background-size", "cover")
                 .set("background-position", "center")
                 .set("background-attachment", "fixed")
@@ -92,8 +94,8 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         heroContent.getStyle().set("gap", "40px");
 
         // Poster image
-        String imageSrc = "/storage/videos/poster/" + rootFolder.getId();
-        Image posterImage = new Image(imageSrc, rootFolder.getFilename());
+        String imageSrc = "/storage/videos/poster/" + productionData.getProductionId();
+        Image posterImage = new Image(imageSrc, productionData.getProductionName());
         posterImage.setWidth("300px");
         posterImage.setHeight("450px");
         posterImage.getStyle()
@@ -114,7 +116,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         infoSection.setAlignItems(FlexComponent.Alignment.START);
 
         // Title
-        H1 title = new H1(rootFolder.getFilename());
+        H1 title = new H1(productionData.getProductionName());
         title.getStyle()
                 .set("margin", "0 0 20px 0")
                 .set("font-size", "3.5rem")
@@ -122,7 +124,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .set("text-shadow", "2px 2px 4px var(--streaming-title-shadow)")
                 .set("line-height", "1.2");
 
-        Paragraph description = new Paragraph(getDescription(rootFolder.getFilename()));
+        Paragraph description = new Paragraph(getDescription(productionData.getProductionDetails()));
         description.getStyle()
                 .set("font-size", "1.2rem")
                 .set("line-height", "1.6")
@@ -158,8 +160,7 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
                 .set("transition", "all 0.3s ease");
 
         // Find first video to play
-        Map<String, List<Metadata>> rootContent = videoManager.loadVideoDirectoryContent(rootFolder);
-        String firstVideoId = findFirstVideoOrLatestVideoWatchedByUsed(rootContent);
+        String firstVideoId = findFirstVideoOrLatestVideoWatchedByUsed(productionData.getProductionFolders());
 
         if (firstVideoId != null) {
             playButton.addClickListener(click ->
@@ -212,16 +213,20 @@ public abstract class AbstractVideoDetailsView extends AbstractStreamingPage imp
         return null;
     }
 
-    private String getDescription(String filename) {
-        return "Experience " + filename + " in stunning quality. " +
-                "Join millions of viewers worldwide in this captivating journey filled with adventure, " +
-                "drama, and unforgettable moments that will keep you on the edge of your seat.";
+    private String getDescription(ProductionDetails productionDetails) {
+        if (productionDetails.getDescription() == null || productionDetails.getDescription().isBlank()) {
+            return "Experience " + productionDetails.getName() + " in stunning quality. " +
+                    "Join millions of viewers worldwide in this captivating journey filled with adventure, " +
+                    "drama, and unforgettable moments that will keep you on the edge of your seat.";
+        } else {
+            return productionDetails.getDescription();
+        }
     }
 
-    private Div buildDetails(Metadata root) {
+    private Div buildDetails(ProductionData productionData) {
         Div result = getScrollableLayoutParent();
 
-        Map<String, List<Metadata>> rootContent = videoManager.loadVideoDirectoryContent(root);
+        Map<String, List<Metadata>> rootContent = productionData.getProductionFolders();
         List<Metadata> defaultPoster = rootContent.get("POSTER");
         List<Metadata> directories = rootContent.get("DIRECTORY");
 

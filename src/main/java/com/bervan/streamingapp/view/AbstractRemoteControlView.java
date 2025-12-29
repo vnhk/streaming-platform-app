@@ -14,7 +14,7 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
     private String roomId;
 
     public AbstractRemoteControlView() {
-        super(ROUTE_NAME, AbstractVideoPlayerView.ROUTE_NAME, AbstractVideoDetailsView.ROUTE_NAME);
+        super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         createUI();
     }
 

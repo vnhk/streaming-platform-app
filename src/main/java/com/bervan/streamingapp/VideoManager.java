@@ -203,8 +203,8 @@ public class VideoManager {
         for (Metadata file : files) {
             if (file.getFilename().equals("poster.png") || file.getFilename().equals("poster.jpg")) {
                 putIf("POSTER", result, file);
-            } else if (file.getFilename().equals("properties.json")) {
-                putIf("PROPERTIES", result, file);
+            } else if (file.getFilename().equals("details.json")) {
+                putIf("DETAILS", result, file);
             } else if (file.getFilename().endsWith("vtt") || file.getFilename().endsWith("srt")) {
                 putIf("SUBTITLES", result, file);
             } else if (supportedExtensions.contains(file.getExtension())) {
