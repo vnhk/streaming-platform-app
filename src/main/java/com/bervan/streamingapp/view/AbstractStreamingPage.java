@@ -98,10 +98,40 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         tile.setSpacing(false);
         tile.setPadding(false);
         tile.setWidth("280px");
-        tile.setHeight("350px");
+        tile.setHeight("420px"); // Increased height to accommodate poster aspect ratio
+        tile.getStyle()
+                .set("position", "relative")
+                .set("overflow", "hidden")
+                .set("border-radius", "12px")
+                .set("cursor", "pointer")
+                .set("transition", "all 0.3s ease")
+                .set("box-shadow", "0 4px 15px rgba(0, 0, 0, 0.2)");
+
+        // Add hover effect
+        tile.getElement().executeJs("""
+            this.addEventListener('mouseenter', () => {
+                this.style.transform = 'scale(1.05)';
+                this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.3)';
+                const hoverOverlay = this.querySelector('.hover-overlay');
+                if (hoverOverlay) {
+                    hoverOverlay.style.opacity = '1';
+                    hoverOverlay.style.transform = 'translateY(0)';
+                }
+            });
+            this.addEventListener('mouseleave', () => {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+                const hoverOverlay = this.querySelector('.hover-overlay');
+                if (hoverOverlay) {
+                    hoverOverlay.style.opacity = '0';
+                    hoverOverlay.style.transform = 'translateY(100%)';
+                }
+            });
+        """);
 
         return tile;
     }
+
 
     protected H4 getModernTitle(String value) {
         H4 title = new H4(value);
@@ -118,7 +148,7 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         }
         Image image = new Image(imageSrc, altText);
         image.setWidth("100%");
-        image.setHeight("240px");
+        image.setHeight("100%"); // Fill entire tile
         image.getStyle()
                 .set("object-fit", "cover")
                 .set("border-radius", "12px");
@@ -129,6 +159,64 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
 
         return image;
     }
+
+    protected Div createRatingBadge(String rating) {
+        Div ratingBadge = new Div();
+        ratingBadge.setText(rating);
+        ratingBadge.addClassName("rating-badge");
+        ratingBadge.getStyle()
+                .set("position", "absolute")
+                .set("bottom", "10px")
+                .set("right", "10px")
+                .set("background", "rgba(0, 0, 0, 0.8)")
+                .set("color", "white")
+                .set("padding", "4px 8px")
+                .set("border-radius", "6px")
+                .set("font-size", "0.9rem")
+                .set("font-weight", "600")
+                .set("z-index", "2")
+                .set("backdrop-filter", "blur(10px)");
+
+        return ratingBadge;
+    }
+
+    protected Div createHoverOverlay(String title, String year) {
+        Div hoverOverlay = new Div();
+        hoverOverlay.addClassName("hover-overlay");
+
+        H4 titleElement = new H4(title);
+        titleElement.getStyle()
+                .set("margin", "0 0 5px 0")
+                .set("color", "white")
+                .set("font-size", "1.1rem")
+                .set("font-weight", "600")
+                .set("text-shadow", "2px 2px 4px rgba(0, 0, 0, 0.8)");
+
+        Div yearElement = new Div(year);
+        yearElement.getStyle()
+                .set("color", "#ccc")
+                .set("font-size", "0.9rem")
+                .set("margin", "0");
+
+        hoverOverlay.add(titleElement, yearElement);
+        hoverOverlay.getStyle()
+                .set("position", "absolute")
+                .set("bottom", "0")
+                .set("left", "0")
+                .set("right", "0")
+                .set("background", "linear-gradient(transparent, rgba(0, 0, 0, 0.9))")
+                .set("padding", "40px 15px 15px 15px")
+                .set("color", "white")
+                .set("opacity", "0")
+                .set("transform", "translateY(100%)")
+                .set("transition", "all 0.3s ease")
+                .set("z-index", "3")
+                .set("border-radius", "0 0 12px 12px");
+
+        return hoverOverlay;
+    }
+
+
 
     protected Div getScrollableLayoutParent() {
         Div result = new Div();
@@ -146,5 +234,27 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
                 .set("z-index", "1");
         return result;
     }
+
+    protected VerticalLayout createProductionTile(String title, String year, String rating,
+                                                  String imageSrc, List<Metadata> defaultPoster) {
+        VerticalLayout tile = getModernTile();
+
+        // Create poster image
+        Image poster = getModernImage(title, imageSrc, defaultPoster);
+
+        // Create rating badge
+        Div ratingBadge = createRatingBadge(rating);
+
+        // Create hover overlay with title and year
+        Div hoverOverlay = createHoverOverlay(title, year);
+
+        // Add all components to tile
+        tile.add(poster);
+        tile.getElement().appendChild(ratingBadge.getElement());
+        tile.getElement().appendChild(hoverOverlay.getElement());
+
+        return tile;
+    }
+
 
 }

@@ -12,7 +12,10 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
-import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Hr;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -420,7 +423,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 String sectionTitle = "📂 " + categoryName + " (" + productions.size() + ")";
                 contentContainer.add(createModernScrollableSection(
                         sectionTitle,
-                        createVideoLayout(productions, ROUTE_NAME + "/details/")
+                        createVideoLayout(productions, ROUTE_NAME + "/details")
                 ));
             }
         }
@@ -444,7 +447,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         if (movies != null && !movies.isEmpty()) {
             contentContainer.add(createModernScrollableSection(
                     "🎬 Movies (" + movies.size() + ")",
-                    createVideoLayout(movies, ROUTE_NAME + "/details/")
+                    createVideoLayout(movies, ROUTE_NAME + "/details")
             ));
         }
 
@@ -453,7 +456,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         if (tvSeries != null && !tvSeries.isEmpty()) {
             contentContainer.add(createModernScrollableSection(
                     "📺 TV Series (" + tvSeries.size() + ")",
-                    createVideoLayout(tvSeries, ROUTE_NAME + "/details/")
+                    createVideoLayout(tvSeries, ROUTE_NAME + "/details")
             ));
         }
 
@@ -462,7 +465,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         if (others != null && !others.isEmpty()) {
             contentContainer.add(createModernScrollableSection(
                     "🎭 Other (" + others.size() + ")",
-                    createVideoLayout(others, ROUTE_NAME + "/details/")
+                    createVideoLayout(others, ROUTE_NAME + "/details")
             ));
         }
     }
@@ -489,7 +492,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         return noResults;
     }
 
-    private HorizontalLayout createVideoLayout(List<ProductionData> productionDataList, String route) {
+    protected HorizontalLayout createVideoLayout(List<ProductionData> productionDataList, String route) {
         HorizontalLayout scrollingLayout = getHorizontalScrollingLayout();
 
         for (ProductionData productionData : productionDataList) {
@@ -497,48 +500,21 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 ProductionDetails productionDetails = productionData.getProductionDetails();
                 Metadata productionMainFolder = productionData.getMainFolder();
 
-                VerticalLayout tile = getModernTile();
+                String title = productionDetails.getName();
+                String year = productionDetails.getReleaseYearStart() != null ?
+                        String.valueOf(productionDetails.getReleaseYearStart()) : "N/A";
+                String rating = productionDetails.getRating() != null ?
+                        String.format("%.1f", productionDetails.getRating()) : "N/A";
                 String imageSrc = "/storage/videos/poster/" + productionMainFolder.getId();
-                Image image = getModernImage(productionDetails.getName(), imageSrc, null);
 
-                // Enhanced title with additional info
-                VerticalLayout titleSection = new VerticalLayout();
-                titleSection.setPadding(false);
-                titleSection.setSpacing(false);
-                titleSection.setWidthFull();
+                // Create the modern production tile with poster, rating, and hover effects
+                VerticalLayout tile = createProductionTile(title, year, rating, imageSrc, null);
 
-                H4 title = getModernTitle(productionDetails.getName());
-
-                // Add rating and year info
-                HorizontalLayout infoLayout = new HorizontalLayout();
-                infoLayout.setPadding(false);
-                infoLayout.setSpacing(true);
-                infoLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
-                infoLayout.getStyle().set("margin-top", "5px");
-
-                if (productionDetails.getRating() != null) {
-                    Span ratingSpan = new Span("⭐ " + String.format("%.1f", productionDetails.getRating()));
-                    ratingSpan.getStyle()
-                            .set("font-size", "0.75rem")
-                            .set("color", "var(--streaming-accent-color)")
-                            .set("font-weight", "600");
-                    infoLayout.add(ratingSpan);
-                }
-
-                if (productionDetails.getReleaseYearStart() != null) {
-                    Span yearSpan = new Span(String.valueOf(productionDetails.getReleaseYearStart()));
-                    yearSpan.getStyle()
-                            .set("font-size", "0.75rem")
-                            .set("color", "var(--lumo-secondary-text-color)");
-                    infoLayout.add(yearSpan);
-                }
-
-                titleSection.add(title, infoLayout);
-
-                tile.add(image, titleSection);
+                // Add click navigation
                 tile.addClickListener(click ->
-                        UI.getCurrent().navigate(route + productionMainFolder.getId())
+                        UI.getCurrent().navigate(route + "/" + productionMainFolder.getId())
                 );
+
                 scrollingLayout.add(tile);
             } catch (Exception e) {
                 log.error("Unable to load video!", e);

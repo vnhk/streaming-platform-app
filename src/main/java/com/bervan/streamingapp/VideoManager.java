@@ -191,7 +191,7 @@ public class VideoManager {
     public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
-                SearchOperation.EQUALS_OPERATION, directory.getPath() + directory.getFilename() + File.separator);
+                SearchOperation.LIKE_OPERATION, directory.getPath() + directory.getFilename() + File.separator + "%");
 
         SearchQueryOption options = new SearchQueryOption(Metadata.class);
         options.setSortField("filename");
