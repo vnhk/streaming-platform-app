@@ -68,7 +68,6 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
 
         H2 sectionTitle = new H2(title);
         sectionTitle.getStyle()
-                .set("color", "#333")
                 .set("margin", "0 0 20px 0")
                 .set("font-size", "2rem")
                 .set("font-weight", "600");
