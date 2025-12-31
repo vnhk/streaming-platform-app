@@ -42,7 +42,7 @@ public class VideoManager {
     private final List<String> supportedExtensions = Arrays.asList("mp4");
     private final SearchService searchService;
     private final FileServiceManager fileServiceManager;
-    @Value("${file.service.storage.folder}")
+    @Value("${file.service.storage.folder.main}")
     public String pathToFileStorage;
     @Value("${streaming-platform.file-storage-relative-path}")
     public String appFolder;
@@ -108,20 +108,6 @@ public class VideoManager {
         return response.getResultList();
     }
 
-    public List<Metadata> loadVideos() {
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.addCriterion("G1", Metadata.class, "path",
-                SearchOperation.LIKE_OPERATION, appFolder.substring(1) + "%"); //startsWith
-        searchRequest.addCriterion("G1", Metadata.class, "extension",
-                SearchOperation.IN_OPERATION, supportedExtensions);
-
-        SearchQueryOption options = new SearchQueryOption(Metadata.class);
-        options.setSortField("filename");
-
-        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-        return response.getResultList();
-    }
-
     public List<Metadata> loadById(String metadataId) {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addIdEqualsCriteria("G1", Metadata.class, UUID.fromString(metadataId));
@@ -134,8 +120,7 @@ public class VideoManager {
     }
 
     public String getSrc(Metadata metadata) {
-        return pathToFileStorage + File.separator +
-                metadata.getPath() + File.separator + metadata.getFilename();
+        return fileServiceManager.getFile(metadata).toString();
     }
 
     public Optional<Metadata> getNextVideo(Metadata videoMetadata) {
