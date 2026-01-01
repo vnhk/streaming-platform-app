@@ -41,8 +41,8 @@ public class StreamingConfig {
             ProductionDetails productionDetails;
             if (details != null && !details.isEmpty()) {
                 Metadata metadata = details.get(0);
-                byte[] file = fileServiceManager.readFile(metadata);
                 try {
+                    byte[] file = fileServiceManager.readFile(metadata);
                     ObjectMapper objectMapper = new ObjectMapper();
                     String jsonString = new String(file, StandardCharsets.UTF_8);
                     productionDetails = objectMapper.readValue(jsonString, ProductionDetails.class);
