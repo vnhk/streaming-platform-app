@@ -8,7 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +59,17 @@ public class StreamingConfig {
                 log.error("Details file is missing for production " + productionEntry.getKey().getPath());
                 continue;
             }
+
+            List<Metadata> poster = productionEntry.getValue().get("POSTER");
+            if (poster != null && !poster.isEmpty()) {
+                try {
+                    byte[] file = fileServiceManager.readFile(poster.get(0));
+                    productionData.setBase64Src(toBase64(new ByteArrayInputStream(file)));
+                } catch (Exception e) {
+                    log.error("Error converting poster to base64", e);
+                }
+            }
+
             result.put(productionData.getProductionName(), productionData);
         }
 
@@ -73,5 +87,16 @@ public class StreamingConfig {
         }
 
         return allVideos;
+    }
+
+    private String toBase64(ByteArrayInputStream in) throws Exception {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
+        }
     }
 }

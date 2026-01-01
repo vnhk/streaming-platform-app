@@ -13,4 +13,5 @@ public class ProductionData {
     private Metadata mainFolder;
     private Map<String, List<Metadata>> productionFolders;
     private ProductionDetails productionDetails;
+    private String base64Src;
 }

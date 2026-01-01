@@ -94,8 +94,15 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         heroContent.getStyle().set("gap", "40px");
 
         // Poster image
-        String imageSrc = "/storage/videos/poster/" + productionData.getProductionId();
-        Image posterImage = new Image(imageSrc, productionData.getProductionName());
+        Image posterImage = null;
+
+        if (productionData.getBase64Src() != null) {
+            posterImage = new Image(productionData.getBase64Src(), productionData.getProductionName());
+        } else {
+            String imageSrc = "/storage/videos/poster/" + productionData.getProductionId();
+            posterImage = new Image(imageSrc, productionData.getProductionName());
+        }
+
         posterImage.setWidth("300px");
         posterImage.setHeight("450px");
         posterImage.getStyle()
