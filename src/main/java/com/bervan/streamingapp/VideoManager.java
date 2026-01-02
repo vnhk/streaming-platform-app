@@ -402,7 +402,7 @@ public class VideoManager {
                 for (SeasonStructure season : seasons) {
                     for (EpisodeStructure episode : season.getEpisodes()) {
                         Metadata video = episode.getVideo();
-                        if (videoId.equals(video.getId().toString())) {
+                        if (video != null && videoId.equals(video.getId().toString())) {
                             return episode.getSubtitles();
                         }
                     }
