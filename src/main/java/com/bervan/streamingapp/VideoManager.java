@@ -364,7 +364,7 @@ public class VideoManager {
             if (productionStructure instanceof MovieRootProductionStructure) {
                 //for movies we get main poster
                 if (productionStructure.getMetadataId().toString().equals(folderId)) {
-                    return Optional.of(productionStructure.getPoster());
+                    return Optional.ofNullable(productionStructure.getPoster());
                 }
             } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
                 //for tv series we get episode poster
@@ -372,13 +372,13 @@ public class VideoManager {
                 for (SeasonStructure season : seasons) {
                     for (EpisodeStructure episode : season.getEpisodes()) {
                         if (episode.getMetadataId().toString().equals(folderId)) {
-                            return Optional.of(episode.getPoster());
+                            return Optional.ofNullable(episode.getPoster());
                         }
                     }
                 }
                 //if not present then main poster
                 if (productionStructure.getMetadataId().toString().equals(folderId)) {
-                    return Optional.of(productionStructure.getPoster());
+                    return Optional.ofNullable(productionStructure.getPoster());
                 }
             }
         }
