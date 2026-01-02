@@ -39,6 +39,7 @@ public class StreamingConfig {
             Metadata mainFolder = productionEntry.getKey();
             productionData.setMainFolder(mainFolder);
             String mainFolderPath = mainFolder.getPath() + mainFolder.getFilename() + File.separator;
+            log.info("Building production's data :{}" , mainFolderPath);
             productionData.setMainFolderPath(mainFolderPath);
             productionData.setProductionId(productionEntry.getKey().getId().toString());
             productionData.setProductionFoldersByPathAndType(productionEntry.getValue());
@@ -164,7 +165,9 @@ public class StreamingConfig {
     private Map<Metadata, MetadataByPathAndType> loadAllProductionsMetadata() {
         Map<Metadata, MetadataByPathAndType> allVideos = new HashMap<>();
         List<Metadata> allVideosFolders = videoManager.loadVideosMainDirectories();
+        log.info("Found {} videos folders", allVideosFolders.size());
         for (Metadata mainVideoFolder : allVideosFolders) {
+            log.info("Processing main video folder {}", mainVideoFolder.getPath() + mainVideoFolder.getFilename());
             allVideos.put(mainVideoFolder, videoManager.loadVideoDirectoryContent(mainVideoFolder));
         }
 
