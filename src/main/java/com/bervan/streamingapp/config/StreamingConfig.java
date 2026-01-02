@@ -47,7 +47,7 @@ public class StreamingConfig {
             MetadataByPathAndType productionFolders = productionEntry.getValue();
 
             if (productionFolders.get(mainFolderPath) == null) {
-                log.error("Details file is missing for production " + productionEntry.getKey().getPath());
+                log.error("Details file is missing for production " + mainFolderPath);
                 continue;
             }
 
@@ -67,7 +67,7 @@ public class StreamingConfig {
                     continue;
                 }
             } else {
-                log.error("Details file is missing for production " + productionEntry.getKey().getPath());
+                log.error("Details file is missing for production " + mainFolderPath);
                 continue;
             }
 
