@@ -4,20 +4,16 @@ import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
+import com.bervan.streamingapp.config.structure.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Configuration
 public class StreamingConfig {
@@ -33,23 +29,28 @@ public class StreamingConfig {
 
     @Bean
     public Map<String, ProductionData> streamingProductionData() {
-        log.debug("DEBUG IF ACCESS TO SSD2");
-        Path path = Paths.get("/app/file-service/storage2/Streaming Platform/test2.txt");
-        log.info("File exist test2.txt?: " + Files.exists(path));
-        path = Paths.get("/app/file-service/storage/test1.txt");
-        log.info("File exist test1.txt?: " + Files.exists(path));
-
         Map<String, ProductionData> result = new HashMap<>();
         log.info("Loading all productions");
         long start = System.currentTimeMillis();
-        Map<Metadata, Map<String, List<Metadata>>> allProductions = loadAllProductions();
+        Map<Metadata, MetadataByPathAndType> allProductions = loadAllProductionsMetadata();
 
-        for (Map.Entry<Metadata, Map<String, List<Metadata>>> productionEntry : allProductions.entrySet()) {
+        for (Map.Entry<Metadata, MetadataByPathAndType> productionEntry : allProductions.entrySet()) {
             ProductionData productionData = new ProductionData();
-            productionData.setMainFolder(productionEntry.getKey());
+            Metadata mainFolder = productionEntry.getKey();
+            productionData.setMainFolder(mainFolder);
+            String mainFolderPath = mainFolder.getPath() + mainFolder.getFilename() + File.separator;
+            productionData.setMainFolderPath(mainFolderPath);
             productionData.setProductionId(productionEntry.getKey().getId().toString());
-            productionData.setProductionFolders(productionEntry.getValue());
-            List<Metadata> details = productionEntry.getValue().get("DETAILS");
+            productionData.setProductionFoldersByPathAndType(productionEntry.getValue());
+
+            MetadataByPathAndType productionFolders = productionEntry.getValue();
+
+            if (productionFolders.get(mainFolderPath) == null) {
+                log.error("Details file is missing for production " + productionEntry.getKey().getPath());
+                continue;
+            }
+
+            List<Metadata> details = productionFolders.get(mainFolderPath).get("DETAILS");
             ProductionDetails productionDetails;
             if (details != null && !details.isEmpty()) {
                 Metadata metadata = details.get(0);
@@ -69,15 +70,8 @@ public class StreamingConfig {
                 continue;
             }
 
-            List<Metadata> poster = productionEntry.getValue().get("POSTER");
-            if (poster != null && !poster.isEmpty()) {
-                try {
-                    byte[] file = fileServiceManager.readFile(poster.get(0));
-                    productionData.setBase64Src(toBase64(new ByteArrayInputStream(file)));
-                } catch (Exception e) {
-                    log.error("Error converting poster to base64", e);
-                }
-            }
+            loadMainPosterSrc(productionFolders, mainFolderPath, productionData);
+            loadProductionStructure(productionData, productionFolders);
 
             result.put(productionData.getProductionName(), productionData);
         }
@@ -88,8 +82,85 @@ public class StreamingConfig {
         return result;
     }
 
-    private Map<Metadata, Map<String, List<Metadata>>> loadAllProductions() {
-        Map<Metadata, Map<String, List<Metadata>>> allVideos = new HashMap<>();
+    private void loadProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
+        BaseRootProductionStructure rootProductionStructure;
+        if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
+            rootProductionStructure = new TvSeriesRootProductionStructure();
+            Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
+            List<Metadata> seasonDirectories = seasonsMap.get("DIRECTORY");
+            List<SeasonStructure> seasonStructureList = new ArrayList<>();
+            for (Metadata seasonDirectory : seasonDirectories) {
+                SeasonStructure seasonStructure = new SeasonStructure();
+                seasonStructure.setSeasonFolder(seasonDirectory);
+                Map<String, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
+                List<Metadata> episodeDirectories = seasonsFilesMap.get("DIRECTORY");
+                List<EpisodeStructure> episodeStructureList = new ArrayList<>();
+                for (Metadata episodeDirectory : episodeDirectories) {
+                    EpisodeStructure episodeStructure = new EpisodeStructure();
+                    episodeStructure.setEpisodeFolder(episodeDirectory);
+                    Map<String, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
+                    List<Metadata> poster = episodeFilesMap.get("POSTER");
+                    if (poster != null && !poster.isEmpty()) {
+                        episodeStructure.setPoster(poster.get(0));
+                    }
+
+                    List<Metadata> video = episodeFilesMap.get("VIDEO");
+                    if (video != null && !video.isEmpty()) {
+                        episodeStructure.setVideo(video.get(0));
+                    }
+
+                    List<Metadata> subtitles = episodeFilesMap.get("SUBTITLES");
+                    episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
+                    episodeStructureList.add(episodeStructure);
+                }
+                seasonStructure.setEpisodes(episodeStructureList);
+                seasonStructureList.add(seasonStructure);
+            }
+            ((TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
+        } else {
+            rootProductionStructure = new MovieRootProductionStructure();
+            List<Metadata> subtitles = productionFolders.get(productionData.getMainFolderPath()).get("SUBTITLES");
+            ((MovieRootProductionStructure) rootProductionStructure).setSubtitles(getSubtitlesMap(subtitles));
+            ((MovieRootProductionStructure) rootProductionStructure).setVideos(productionFolders.get(productionData.getMainFolderPath()).get("VIDEO"));
+        }
+        rootProductionStructure.setMainFolder(productionData.getMainFolder());
+        rootProductionStructure.setDetails(productionFolders.get(productionData.getMainFolderPath()).get("DETAILS").get(0));
+        List<Metadata> poster = productionFolders.get(productionData.getMainFolderPath()).get("POSTER");
+        if (poster != null && !poster.isEmpty()) {
+            rootProductionStructure.setPoster(poster.get(0));
+        }
+
+        productionData.setProductionStructure(rootProductionStructure);
+    }
+
+    private Map<String, Metadata> getSubtitlesMap(List<Metadata> subtitles) {
+        if (subtitles == null || subtitles.isEmpty()) {
+            return new HashMap<>();
+        }
+        Optional<Metadata> enSubtitle = videoManager.getSubtitle(VideoManager.EN, subtitles);
+        Optional<Metadata> plSubtitle = videoManager.getSubtitle(VideoManager.PL, subtitles);
+        Optional<Metadata> esSubtitle = videoManager.getSubtitle(VideoManager.ES, subtitles);
+        Map<String, Metadata> subtitlesMap = new HashMap<>();
+        enSubtitle.ifPresent(metadata -> subtitlesMap.put(VideoManager.EN, metadata));
+        plSubtitle.ifPresent(metadata -> subtitlesMap.put(VideoManager.PL, metadata));
+        esSubtitle.ifPresent(metadata -> subtitlesMap.put(VideoManager.ES, metadata));
+        return subtitlesMap;
+    }
+
+    private void loadMainPosterSrc(MetadataByPathAndType productionFolders, String mainFolderPath, ProductionData productionData) {
+        List<Metadata> mainFolderPoster = productionFolders.get(mainFolderPath).get("POSTER");
+        if (mainFolderPoster != null && !mainFolderPoster.isEmpty()) {
+            try {
+                byte[] file = fileServiceManager.readFile(mainFolderPoster.get(0));
+                productionData.setBase64PosterSrc(toBase64(new ByteArrayInputStream(file)));
+            } catch (Exception e) {
+                log.error("Error converting poster to base64", e);
+            }
+        }
+    }
+
+    private Map<Metadata, MetadataByPathAndType> loadAllProductionsMetadata() {
+        Map<Metadata, MetadataByPathAndType> allVideos = new HashMap<>();
         List<Metadata> allVideosFolders = videoManager.loadVideosMainDirectories();
         for (Metadata mainVideoFolder : allVideosFolders) {
             allVideos.put(mainVideoFolder, videoManager.loadVideoDirectoryContent(mainVideoFolder));

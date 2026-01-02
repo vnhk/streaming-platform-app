@@ -8,6 +8,9 @@ import com.bervan.common.search.model.SearchResponse;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
+import com.bervan.streamingapp.config.MetadataByPathAndType;
+import com.bervan.streamingapp.config.ProductionData;
+import com.bervan.streamingapp.config.structure.*;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,13 +31,16 @@ public class VideoManager {
     private static final List<String> subtitleSeparator = List.of(".", "_", "-", " ");
     private static final List<String> polSubtitles = List.of("pl", "pol", "polish");
     private static final List<String> engSubtitles = List.of("en", "eng", "english");
+    private static final List<String> espSubtitles = List.of("es", "esp", "spanish");
     private static final Map<String, List<String>> subtitlesParts = new HashMap<>();
     public static String PL = "pl";
     public static String EN = "en";
+    public static String ES = "es";
 
     static {
         subtitlesParts.put(PL, polSubtitles);
         subtitlesParts.put(EN, engSubtitles);
+        subtitlesParts.put(ES, espSubtitles);
     }
 
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
@@ -173,7 +179,7 @@ public class VideoManager {
         return new ArrayList<>(supportedExtensions);
     }
 
-    public Map<String, List<Metadata>> loadVideoDirectoryContent(Metadata directory) {
+    public MetadataByPathAndType loadVideoDirectoryContent(Metadata directory) {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
                 SearchOperation.LIKE_OPERATION, directory.getPath() + directory.getFilename() + File.separator + "%");
@@ -198,7 +204,26 @@ public class VideoManager {
                 putIf("DIRECTORY", result, file);
             }
         }
-        return result;
+
+        MetadataByPathAndType metadataByPath = new MetadataByPathAndType();
+
+        for (Map.Entry<String, List<Metadata>> metadataByType : result.entrySet()) {
+            String type = metadataByType.getKey();
+            for (Metadata metadata : metadataByType.getValue()) {
+                String path = metadata.getPath();
+                metadataByPath.computeIfAbsent(path, k -> new HashMap<>());
+                Map<String, List<Metadata>> typeMap = metadataByPath.get(path);
+                if (typeMap == null) {
+                    typeMap = new HashMap<>();
+                    typeMap.put(type, new ArrayList<>());
+                }
+
+                typeMap.computeIfAbsent(type, k -> new ArrayList<>());
+                typeMap.get(type).add(metadata);
+            }
+        }
+
+        return metadataByPath;
     }
 
     public Metadata getMainMovieFolder(Metadata video) {
@@ -318,7 +343,8 @@ public class VideoManager {
 
             SearchResponse<Metadata> response = searchService.search(searchRequest, options);
             if (response.getAllFound() == 1) {
-                List<Metadata> video = loadVideoDirectoryContent(response.getResultList().get(0)).get("VIDEO");
+                Metadata directory = response.getResultList().get(0);
+                List<Metadata> video = loadVideoDirectoryContent(directory).get(directory.getPath() + directory.getFilename() + File.separator).get("VIDEO");
                 if (video.size() == 1) {
                     return Optional.ofNullable(video.get(0));
                 }
@@ -330,4 +356,59 @@ public class VideoManager {
         return Optional.empty();
     }
 
+
+    public Optional<Metadata> findPosterByFolderId(String folderId, Map<String, ProductionData> streamingProductionData) {
+        Collection<ProductionData> productions = streamingProductionData.values();
+        for (ProductionData productionData : productions) {
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MovieRootProductionStructure) {
+                //for movies we get main poster
+                if (productionStructure.getMetadataId().toString().equals(folderId)) {
+                    return Optional.of(productionStructure.getPoster());
+                }
+            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
+                //for tv series we get episode poster
+                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (SeasonStructure season : seasons) {
+                    for (EpisodeStructure episode : season.getEpisodes()) {
+                        if (episode.getMetadataId().toString().equals(folderId)) {
+                            return Optional.of(episode.getPoster());
+                        }
+                    }
+                }
+                //if not present then main poster
+                if (productionStructure.getMetadataId().toString().equals(folderId)) {
+                    return Optional.of(productionStructure.getPoster());
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Map<String, Metadata> findSubtitlesByVideoId(String videoId, Map<String, ProductionData> streamingProductionData) {
+        Collection<ProductionData> productions = streamingProductionData.values();
+        for (ProductionData productionData : productions) {
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MovieRootProductionStructure) {
+                //for movies we get subtitles from the main folder
+                for (Metadata video : ((MovieRootProductionStructure) productionStructure).getVideos()) {
+                    if (videoId.equals(video.getId().toString())) {
+                        return ((MovieRootProductionStructure) productionStructure).getSubtitles();
+                    }
+                }
+            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
+                //for tv series we go to the episode folder
+                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (SeasonStructure season : seasons) {
+                    for (EpisodeStructure episode : season.getEpisodes()) {
+                        Metadata video = episode.getVideo();
+                        if (videoId.equals(video.getId().toString())) {
+                            return episode.getSubtitles();
+                        }
+                    }
+                }
+            }
+        }
+        return new HashMap<>();
+    }
 }

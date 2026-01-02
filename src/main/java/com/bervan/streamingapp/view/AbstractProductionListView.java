@@ -506,14 +506,14 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 String rating = productionDetails.getRating() != null ?
                         String.format("%.1f", productionDetails.getRating()) : "N/A";
                 String imageSrc = null;
-                if (productionData.getBase64Src() != null) {
-                    imageSrc = productionData.getBase64Src();
+                if (productionData.getBase64PosterSrc() != null) {
+                    imageSrc = productionData.getBase64PosterSrc();
                 } else {
                     imageSrc = "/storage/videos/poster/" + productionMainFolder.getId();
                 }
 
                 // Create the modern production tile with poster, rating, and hover effects
-                VerticalLayout tile = createProductionTile(title, year, rating, imageSrc, null);
+                VerticalLayout tile = createProductionTile(title, year, rating, imageSrc);
 
                 // Add click navigation
                 tile.addClickListener(click ->

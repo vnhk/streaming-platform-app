@@ -14,8 +14,6 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 
-import java.util.List;
-
 public abstract class AbstractStreamingPage extends AbstractPageView {
 
     public AbstractStreamingPage(String route, String... notVisibleButtonRoutes) {
@@ -109,25 +107,25 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
 
         // Add hover effect
         tile.getElement().executeJs("""
-            this.addEventListener('mouseenter', () => {
-                this.style.transform = 'scale(1.05)';
-                this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.3)';
-                const hoverOverlay = this.querySelector('.hover-overlay');
-                if (hoverOverlay) {
-                    hoverOverlay.style.opacity = '1';
-                    hoverOverlay.style.transform = 'translateY(0)';
-                }
-            });
-            this.addEventListener('mouseleave', () => {
-                this.style.transform = 'scale(1)';
-                this.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
-                const hoverOverlay = this.querySelector('.hover-overlay');
-                if (hoverOverlay) {
-                    hoverOverlay.style.opacity = '0';
-                    hoverOverlay.style.transform = 'translateY(100%)';
-                }
-            });
-        """);
+                    this.addEventListener('mouseenter', () => {
+                        this.style.transform = 'scale(1.05)';
+                        this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.3)';
+                        const hoverOverlay = this.querySelector('.hover-overlay');
+                        if (hoverOverlay) {
+                            hoverOverlay.style.opacity = '1';
+                            hoverOverlay.style.transform = 'translateY(0)';
+                        }
+                    });
+                    this.addEventListener('mouseleave', () => {
+                        this.style.transform = 'scale(1)';
+                        this.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+                        const hoverOverlay = this.querySelector('.hover-overlay');
+                        if (hoverOverlay) {
+                            hoverOverlay.style.opacity = '0';
+                            hoverOverlay.style.transform = 'translateY(100%)';
+                        }
+                    });
+                """);
 
         return tile;
     }
@@ -139,10 +137,10 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         return title;
     }
 
-    protected Image getModernImage(String altText, String imageSrc, List<Metadata> defaultPoster) {
+    protected Image getModernImage(String altText, String imageSrc, Metadata defaultPoster) {
         String fallbackImageSrc;
-        if (defaultPoster != null && !defaultPoster.isEmpty()) {
-            fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.get(0).getId();
+        if (defaultPoster != null) {
+            fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.getId();
         } else {
             fallbackImageSrc = "images/no_video_image.png";
         }
@@ -217,7 +215,6 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
     }
 
 
-
     protected Div getScrollableLayoutParent() {
         Div result = new Div();
         result.addClassName("scrollable-layout-parent");
@@ -236,11 +233,11 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
     }
 
     protected VerticalLayout createProductionTile(String title, String year, String rating,
-                                                  String imageSrc, List<Metadata> defaultPoster) {
+                                                  String imageSrc) {
         VerticalLayout tile = getModernTile();
 
         // Create poster image
-        Image poster = getModernImage(title, imageSrc, defaultPoster);
+        Image poster = getModernImage(title, imageSrc, null);
 
         // Create rating badge
         Div ratingBadge = createRatingBadge(rating);

@@ -2,6 +2,7 @@ package com.bervan.streamingapp;
 
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
+import com.bervan.streamingapp.config.ProductionData;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -20,26 +22,29 @@ import java.util.Optional;
 public class VideoController {
     private final VideoManager videoManager;
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
+    private final Map<String, ProductionData> streamingProductionData;
 
-    public VideoController(VideoManager videoManager) {
+    public VideoController(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
         this.videoManager = videoManager;
+        this.streamingProductionData = streamingProductionData;
     }
 
     @GetMapping("/poster/{folderId}")
     public ResponseEntity<Resource> servePoster(@PathVariable String folderId) {
         try {
-            List<Metadata> metadata = videoManager.loadById(folderId);
+            List<Metadata> metadataL = videoManager.loadById(folderId);
 
-            if (metadata.size() != 1) {
+            if (metadataL.size() != 1) {
                 log.error("Could not find file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            List<Metadata> poster = videoManager.loadVideoDirectoryContent(metadata.get(0)).get("POSTER");
-            if (poster == null) {
+            Optional<Metadata> poster = videoManager.findPosterByFolderId(folderId, streamingProductionData);
+
+            if (poster.isEmpty()) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
-            Path file = Path.of(videoManager.getSrc(poster.get(0)));
+            Path file = Path.of(videoManager.getSrc(poster.get()));
             Resource resource = new UrlResource(file.toUri());
             if (!resource.exists() || !resource.isReadable()) {
                 return ResponseEntity.notFound().build();
@@ -87,20 +92,20 @@ public class VideoController {
             List<Metadata> metadata = videoManager.loadById(videoId);
 
             if (metadata.size() != 1) {
-                log.error("Could not find file based on provided id!");
+                log.error("Could not find video file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Metadata videoFolder = videoManager.getVideoFolder(metadata.get(0));
-            List<Metadata> subtitles = videoManager.loadVideoDirectoryContent(videoFolder).get("SUBTITLES");
-            if (subtitles == null) {
+
+            Map<String, Metadata> subtitlesByVideoId = videoManager.findSubtitlesByVideoId(videoId, streamingProductionData);
+            if (subtitlesByVideoId == null) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Optional<Metadata> subtitle = videoManager.getSubtitle(language, subtitles);
-            if (subtitle.isPresent()) {
+            Metadata subtitle = subtitlesByVideoId.get(language);
+            if (subtitle != null) {
 
-                Resource resource = getSubtitleResource(subtitle.get());
+                Resource resource = getSubtitleResource(subtitle);
                 if (resource.exists() && resource.isReadable()) {
                     HttpHeaders headers = new HttpHeaders();
                     headers.setContentType(MediaType.valueOf("text/vtt"));

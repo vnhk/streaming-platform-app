@@ -7,6 +7,7 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
 import com.bervan.streamingapp.config.ProductionData;
+import com.bervan.streamingapp.config.structure.*;
 import com.vaadin.flow.component.*;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
@@ -19,10 +20,7 @@ import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 public abstract class AbstractProductionPlayerView extends AbstractRemoteControlSupportedView
         implements HasUrlParameter<String> {
@@ -36,12 +34,11 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     private static final String VIDEO_PLAYER_ID = "videoPlayer";
     // UI Components
     protected final HorizontalLayout navigationBar = new HorizontalLayout();
+    protected final Map<String, ProductionData> streamingProductionData;
     // Dependencies
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
-    private final Map<String, ProductionData> streamingProductionData;
     private VideoPlayerComponent videoPlayer;
-    private SubtitleControlPanel subtitleControls;
 
     // State
     private String currentVideoId;
@@ -81,12 +78,29 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         }
     }
 
+    //instead of searching tree for all production, video player needs to know production id (send by parameter)
     private Optional<Metadata> findVideoById(String videoId) {
-        return streamingProductionData.values().stream()
-                .flatMap(prod -> prod.getProductionFolders().values().stream())
-                .flatMap(Collection::stream)
-                .filter(video -> video.getId().toString().equals(videoId))
-                .findFirst();
+        Collection<ProductionData> productions = streamingProductionData.values();
+        for (ProductionData productionData : productions) {
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MovieRootProductionStructure) {
+                List<Metadata> videos = ((MovieRootProductionStructure) productionStructure).getVideos();
+                Optional<Metadata> videoOpt = videos.stream().filter(video -> video.getId().toString().equals(videoId)).findFirst();
+                if (videoOpt.isPresent()) {
+                    return videoOpt;
+                }
+            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
+                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (SeasonStructure season : seasons) {
+                    for (EpisodeStructure episode : season.getEpisodes()) {
+                        if (episode.getVideo().getId().toString().equals(videoId)) {
+                            return Optional.of(episode.getVideo());
+                        }
+                    }
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private WatchDetails loadWatchDetails(String videoId) {
@@ -284,7 +298,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         videoPlayer = createVideoPlayer(watchDetails);
         add(videoPlayer);
 
-        subtitleControls = createSubtitleControls(watchDetails);
+        SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
         add(subtitleControls);
 
         addCustomComponents(currentVideoId, video); // ADD THIS LINE
