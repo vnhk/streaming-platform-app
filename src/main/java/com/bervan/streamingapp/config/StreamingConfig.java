@@ -11,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +33,12 @@ public class StreamingConfig {
 
     @Bean
     public Map<String, ProductionData> streamingProductionData() {
+        log.debug("DEBUG IF ACCESS TO SSD2");
+        Path path = Paths.get("/mnt/ssd1/movies/Streaming Platform/test2.txt");
+        log.info("File exist test2.txt?: " + Files.exists(path));
+        path = Paths.get("/mnt/ssd1/movies/test1.txt");
+        log.info("File exist test1.txt?: " + Files.exists(path));
+
         Map<String, ProductionData> result = new HashMap<>();
         log.info("Loading all productions");
         long start = System.currentTimeMillis();
