@@ -38,7 +38,7 @@ public class StreamingConfig {
             ProductionData productionData = new ProductionData();
             Metadata mainFolder = productionEntry.getKey();
             productionData.setMainFolder(mainFolder);
-            String mainFolderPath = mainFolder.getPath() + mainFolder.getFilename() + File.separator;
+            String mainFolderPath = (mainFolder.getPath() + mainFolder.getFilename() + File.separator).trim();
             log.info("Building production's data :{}", mainFolderPath);
             productionData.setMainFolderPath(mainFolderPath);
             productionData.setProductionId(productionEntry.getKey().getId().toString());
@@ -47,7 +47,7 @@ public class StreamingConfig {
             MetadataByPathAndType productionFolders = productionEntry.getValue();
 
             if (productionFolders.get(mainFolderPath) == null) {
-                log.error("Details file is missing for production " + mainFolderPath);
+                log.error("Production Folders Empty: Details file is missing for production " + mainFolderPath);
                 continue;
             }
 
@@ -67,7 +67,7 @@ public class StreamingConfig {
                     continue;
                 }
             } else {
-                log.error("Details file is missing for production " + mainFolderPath);
+                log.error("Details file does not exist or cannot be loaded: Details file is missing for production " + mainFolderPath);
                 continue;
             }
 
