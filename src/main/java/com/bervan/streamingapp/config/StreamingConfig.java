@@ -39,7 +39,7 @@ public class StreamingConfig {
             Metadata mainFolder = productionEntry.getKey();
             productionData.setMainFolder(mainFolder);
             String mainFolderPath = mainFolder.getPath() + mainFolder.getFilename() + File.separator;
-            log.info("Building production's data :{}" , mainFolderPath);
+            log.info("Building production's data :{}", mainFolderPath);
             productionData.setMainFolderPath(mainFolderPath);
             productionData.setProductionId(productionEntry.getKey().getId().toString());
             productionData.setProductionFoldersByPathAndType(productionEntry.getValue());
@@ -79,7 +79,7 @@ public class StreamingConfig {
 
         long end = System.currentTimeMillis();
         log.info("Loading all productions finished in {} ms", end - start);
-
+        log.info("Loaded Productions: [{}]", String.join(", ", result.keySet()));
         return result;
     }
 
