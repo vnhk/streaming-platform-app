@@ -89,32 +89,34 @@ public class StreamingConfig {
             Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
             List<Metadata> seasonDirectories = seasonsMap.get("DIRECTORY");
             List<SeasonStructure> seasonStructureList = new ArrayList<>();
-            for (Metadata seasonDirectory : seasonDirectories) {
-                SeasonStructure seasonStructure = new SeasonStructure();
-                seasonStructure.setSeasonFolder(seasonDirectory);
-                Map<String, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
-                List<Metadata> episodeDirectories = seasonsFilesMap.get("DIRECTORY");
-                List<EpisodeStructure> episodeStructureList = new ArrayList<>();
-                for (Metadata episodeDirectory : episodeDirectories) {
-                    EpisodeStructure episodeStructure = new EpisodeStructure();
-                    episodeStructure.setEpisodeFolder(episodeDirectory);
-                    Map<String, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
-                    List<Metadata> poster = episodeFilesMap.get("POSTER");
-                    if (poster != null && !poster.isEmpty()) {
-                        episodeStructure.setPoster(poster.get(0));
-                    }
+            if (seasonDirectories != null && !seasonDirectories.isEmpty()) {
+                for (Metadata seasonDirectory : seasonDirectories) {
+                    SeasonStructure seasonStructure = new SeasonStructure();
+                    seasonStructure.setSeasonFolder(seasonDirectory);
+                    Map<String, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
+                    List<Metadata> episodeDirectories = seasonsFilesMap.get("DIRECTORY");
+                    List<EpisodeStructure> episodeStructureList = new ArrayList<>();
+                    for (Metadata episodeDirectory : episodeDirectories) {
+                        EpisodeStructure episodeStructure = new EpisodeStructure();
+                        episodeStructure.setEpisodeFolder(episodeDirectory);
+                        Map<String, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
+                        List<Metadata> poster = episodeFilesMap.get("POSTER");
+                        if (poster != null && !poster.isEmpty()) {
+                            episodeStructure.setPoster(poster.get(0));
+                        }
 
-                    List<Metadata> video = episodeFilesMap.get("VIDEO");
-                    if (video != null && !video.isEmpty()) {
-                        episodeStructure.setVideo(video.get(0));
-                    }
+                        List<Metadata> video = episodeFilesMap.get("VIDEO");
+                        if (video != null && !video.isEmpty()) {
+                            episodeStructure.setVideo(video.get(0));
+                        }
 
-                    List<Metadata> subtitles = episodeFilesMap.get("SUBTITLES");
-                    episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
-                    episodeStructureList.add(episodeStructure);
+                        List<Metadata> subtitles = episodeFilesMap.get("SUBTITLES");
+                        episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
+                        episodeStructureList.add(episodeStructure);
+                    }
+                    seasonStructure.setEpisodes(episodeStructureList);
+                    seasonStructureList.add(seasonStructure);
                 }
-                seasonStructure.setEpisodes(episodeStructureList);
-                seasonStructureList.add(seasonStructure);
             }
             ((TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
         } else {
