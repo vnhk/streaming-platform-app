@@ -34,9 +34,9 @@ public class StreamingConfig {
     @Bean
     public Map<String, ProductionData> streamingProductionData() {
         log.debug("DEBUG IF ACCESS TO SSD2");
-        Path path = Paths.get("/mnt/ssd1/movies/Streaming Platform/test2.txt");
+        Path path = Paths.get("/app/file-service/storage2/Streaming Platform/test2.txt");
         log.info("File exist test2.txt?: " + Files.exists(path));
-        path = Paths.get("/mnt/ssd1/movies/test1.txt");
+        path = Paths.get("/app/file-service/storage/test1.txt");
         log.info("File exist test1.txt?: " + Files.exists(path));
 
         Map<String, ProductionData> result = new HashMap<>();
