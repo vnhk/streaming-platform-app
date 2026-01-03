@@ -92,10 +92,14 @@ public class StreamingConfig {
     }
 
     private void loadProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
-        if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.HLS) {
-            loadHLSProductionStructure(productionData, productionFolders);
-        } else {
-            loadMP4ProductionStructure(productionData, productionFolders);
+        try {
+            if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.HLS) {
+                loadHLSProductionStructure(productionData, productionFolders);
+            } else {
+                loadMP4ProductionStructure(productionData, productionFolders);
+            }
+        } catch (Exception e) {
+            log.error("Error loading production structure", e);
         }
     }
 

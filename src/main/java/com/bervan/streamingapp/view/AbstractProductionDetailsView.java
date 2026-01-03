@@ -308,11 +308,13 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     }
 
     private VerticalLayout createTile(Metadata defaultPoster, Metadata primaryPoster, int videoCounter) {
-        String imageSrc;
-        if (primaryPoster == null) {
+        String imageSrc = "";
+        if (primaryPoster == null && defaultPoster != null) {
             imageSrc = "/storage/videos/poster/direct/" + defaultPoster.getId();
-        } else {
+        } else if (primaryPoster != null) {
             imageSrc = "/storage/videos/poster/direct/" + primaryPoster.getId();
+        } else {
+            imageSrc = "images/no_video_image.png";
         }
 
         Image image = getModernImage("no-image", imageSrc);

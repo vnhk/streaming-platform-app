@@ -1,40 +1,62 @@
 package com.bervan.streamingapp.view.player;
 
 import com.bervan.streamingapp.config.ProductionData;
+import com.google.gson.Gson;
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.dom.Element;
+import lombok.Getter;
+import lombok.Setter;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
-/**
- * Component encapsulating the HTML5 video player with HLS support via hls.js
- */
+@Getter
+@Setter
 public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
     private final Element videoElement;
+    private final Element controlsOverlay;
     private final String currentVideoFolder;
     private final String playerUniqueId;
     private final ProductionData productionData;
     private final String componentId;
 
-    public HLSVideoPlayerComponent(String componentId, String currentVideoFolder, double startTime, ProductionData productionData) {
+    // Track information
+    private final List<TrackInfo> audioTracks = new ArrayList<>();
+    private final List<TrackInfo> subtitleTracks = new ArrayList<>();
+    private int currentAudioTrackIndex = 0;
+    private int currentSubtitleTrackIndex = -1;
+
+    // Callbacks
+    private Consumer<List<TrackInfo>> onAudioTracksLoaded;
+    private Consumer<List<TrackInfo>> onSubtitleTracksLoaded;
+    private Consumer<Integer> onAudioTrackChanged;
+    private Consumer<Integer> onSubtitleTrackChanged;
+
+    public HLSVideoPlayerComponent(String componentId, String currentVideoFolder,
+                                   double startTime, ProductionData productionData) {
         this.componentId = componentId;
         this.currentVideoFolder = currentVideoFolder;
         this.productionData = productionData;
-        // Create a unique DOM ID for this specific player instance
         this.playerUniqueId = componentId + "_" + UUID.randomUUID().toString().substring(0, 8);
 
         addClassName("video-container");
         setSizeFull();
+        getElement().getStyle().set("position", "relative");
 
         this.videoElement = buildVideoElement();
-        getElement().appendChild(videoElement);
+        this.controlsOverlay = buildControlsOverlay();
 
+        getElement().appendChild(videoElement);
+        getElement().appendChild(controlsOverlay);
+
+        injectStyles();
         initializeSubtitleShiftFunction();
 
-        // We set the start time, but application happens after metadata load in JS
         if (startTime > 0) {
-            // We store it as a data attribute to access it in JS on load
             videoElement.setAttribute("data-start-time", String.valueOf(startTime));
         }
     }
@@ -44,8 +66,7 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         video.setAttribute("id", playerUniqueId);
         video.setAttribute("controls", "");
         video.setAttribute("playsinline", "");
-        // Poster image could be dynamic based on videoId
-         video.setAttribute("poster", "/storage/video/poster/" + currentVideoFolder);
+        video.setAttribute("poster", "/storage/video/poster/" + currentVideoFolder);
         video.setAttribute("style", "width: 100%; height: 100%; object-fit: contain;");
 
         addSubtitleTracks(video, currentVideoFolder);
@@ -53,171 +74,653 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         return video;
     }
 
+    private Element buildControlsOverlay() {
+        Element overlay = new Element("div");
+        overlay.setAttribute("id", playerUniqueId + "_overlay");
+        overlay.setAttribute("class", "hls-controls-overlay");
+        return overlay;
+    }
+
+    private void injectStyles() {
+        String css = """
+                <style>
+                .hls-controls-overlay {
+                    position: absolute;
+                    bottom: 60px;
+                    right: 12px;
+                    z-index: 2147483647;
+                }
+                .hls-settings-btn {
+                    background: rgba(0,0,0,0.7);
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    color: white;
+                    font-size: 20px;
+                    transition: background 0.2s;
+                }
+                .hls-settings-btn:hover {
+                    background: rgba(0,0,0,0.9);
+                }
+                .hls-settings-panel {
+                    display: none;
+                    position: absolute;
+                    bottom: 100%;
+                    right: 0;
+                    background: rgba(20,20,20,0.95);
+                    border-radius: 8px;
+                    padding: 0;
+                    min-width: 280px;
+                    margin-bottom: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                    max-height: 400px;
+                    overflow-y: auto;
+                }
+                .hls-settings-panel.open {
+                    display: block;
+                }
+                .hls-panel-section {
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                }
+                .hls-panel-section:last-child {
+                    border-bottom: none;
+                }
+                .hls-panel-header {
+                    padding: 12px 16px;
+                    font-weight: 600;
+                    color: #fff;
+                    font-size: 14px;
+                    background: rgba(255,255,255,0.05);
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .hls-panel-header svg {
+                    width: 18px;
+                    height: 18px;
+                }
+                .hls-track-list {
+                    list-style: none;
+                    margin: 0;
+                    padding: 8px 0;
+                }
+                .hls-track-item {
+                    padding: 10px 16px;
+                    cursor: pointer;
+                    color: #ccc;
+                    font-size: 13px;
+                    transition: all 0.15s;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+                .hls-track-item:hover {
+                    background: rgba(255,255,255,0.1);
+                    color: #fff;
+                }
+                .hls-track-item.active {
+                    color: #3ea6ff;
+                    background: rgba(62,166,255,0.1);
+                }
+                .hls-track-item.active::before {
+                    content: '✓';
+                    font-weight: bold;
+                }
+                .hls-track-item:not(.active)::before {
+                    content: '';
+                    width: 14px;
+                    display: inline-block;
+                }
+                .hls-no-tracks {
+                    padding: 12px 16px;
+                    color: #888;
+                    font-size: 13px;
+                    font-style: italic;
+                }
+                </style>
+                """;
+
+        String injectCssJs = """
+                (function() {
+                    if (!document.getElementById('hls-player-styles')) {
+                        var styleEl = document.createElement('div');
+                        styleEl.id = 'hls-player-styles';
+                        styleEl.innerHTML = $0;
+                        document.head.appendChild(styleEl.firstElementChild);
+                    }
+                })();
+                """;
+
+        getElement().executeJs(injectCssJs, css);
+    }
+
     @Override
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
-        // Initialize HLS when the component is attached to the DOM
         initializeHlsPlayer();
+        initializeControlsOverlay();
     }
 
     private void initializeHlsPlayer() {
-        // Construct the HLS Manifest URL
-        // Using an endpoint approach as recommended
         String hlsUrl = "/storage/videos/hls/" + currentVideoFolder + "/master.m3u8";
 
-        // JavaScript to initialize HLS
-        // We check for HLS support (hls.js) or native support (Safari)
-        String js = "" +
-                "var video = document.getElementById($0);" +
-                "var src = $1;" +
-                "var startTime = parseFloat(video.getAttribute('data-start-time') || '0');" +
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    var src = $1;
+                    var startTime = parseFloat(video.getAttribute('data-start-time') || '0');
+                    var componentEl = $2;
+                    var playerId = $0;
+                
+                    function notifyTracksLoaded(hls) {
+                        var audioTracks = hls.audioTracks.map(function(track, idx) {
+                            return {
+                                id: track.id,
+                                index: idx,
+                                name: track.name || ('Audio ' + (idx + 1)),
+                                lang: track.lang || 'und',
+                                type: 'audio'
+                            };
+                        });
+                
+                        var subtitleTracks = hls.subtitleTracks.map(function(track, idx) {
+                            return {
+                                id: track.id,
+                                index: idx,
+                                name: track.name || track.lang || ('Subtitle ' + (idx + 1)),
+                                lang: track.lang || 'und',
+                                type: 'subtitle'
+                            };
+                        });
+                
+                        window['hls_audio_tracks_' + playerId] = audioTracks;
+                        window['hls_subtitle_tracks_' + playerId] = subtitleTracks;
+                        window['hls_current_audio_' + playerId] = hls.audioTrack;
+                        window['hls_current_subtitle_' + playerId] = hls.subtitleTrack;
+                
+                        componentEl.$server.onAudioTracksLoaded(JSON.stringify(audioTracks));
+                        componentEl.$server.onSubtitleTracksLoaded(JSON.stringify(subtitleTracks));
+                
+                        if (typeof window.updateTrackUI === 'function') {
+                            window.updateTrackUI(playerId);
+                        }
+                    }
+                
+                    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                        var hls = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: false
+                        });
+                        hls.loadSource(src);
+                        hls.attachMedia(video);
+                
+                        hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                            if (startTime > 0) {
+                                video.currentTime = startTime;
+                            }
+                            notifyTracksLoaded(hls);
+                        });
+                
+                        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function(event, data) {
+                            window['hls_current_audio_' + playerId] = data.id;
+                            componentEl.$server.onAudioTrackChanged(data.id);
+                            if (typeof window.updateTrackUI === 'function') {
+                                window.updateTrackUI(playerId);
+                            }
+                        });
+                
+                        hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, function(event, data) {
+                            window['hls_current_subtitle_' + playerId] = data.id;
+                            componentEl.$server.onSubtitleTrackChanged(data.id);
+                            if (typeof window.updateTrackUI === 'function') {
+                                window.updateTrackUI(playerId);
+                            }
+                        });
+                
+                        hls.on(Hls.Events.ERROR, function(event, data) {
+                            if (data.fatal) {
+                                switch (data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        console.error('HLS Network error, trying to recover...');
+                                        hls.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        console.error('HLS Media error, trying to recover...');
+                                        hls.recoverMediaError();
+                                        break;
+                                    default:
+                                        hls.destroy();
+                                        break;
+                                }
+                            }
+                        });
+                
+                        window['hls_instance_' + playerId] = hls;
+                
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        video.src = src;
+                        video.addEventListener('loadedmetadata', function() {
+                            if (startTime > 0) {
+                                video.currentTime = startTime;
+                            }
+                            if (typeof window.handleNativeHLSTracks === 'function') {
+                                window.handleNativeHLSTracks(video, componentEl, playerId);
+                            }
+                        });
+                    }
+                })();
+                """;
 
-                "if (Hls.isSupported()) {" +
-                "   var hls = new Hls();" +
-                "   hls.loadSource(src);" +
-                "   hls.attachMedia(video);" +
-                "   hls.on(Hls.Events.MANIFEST_PARSED, function() {" +
-                "       if(startTime > 0) video.currentTime = startTime;" +
-                // "       video.play();" + // Auto-play if desired
-                "   });" +
-                "   window['hls_instance_' + $0] = hls;" + // Store reference to destroy later
-                "   " +
-                "   hls.on(Hls.Events.ERROR, function (event, data) {" +
-                "       if (data.fatal) {" +
-                "           switch (data.type) {" +
-                "               case Hls.ErrorTypes.NETWORK_ERROR:" +
-                "                   console.error('HLS Network error, trying to recover...');" +
-                "                   hls.startLoad();" +
-                "                   break;" +
-                "               case Hls.ErrorTypes.MEDIA_ERROR:" +
-                "                   console.error('HLS Media error, trying to recover...');" +
-                "                   hls.recoverMediaError();" +
-                "                   break;" +
-                "               default:" +
-                "                   hls.destroy();" +
-                "                   break;" +
-                "           }" +
-                "       }" +
-                "   });" +
-                "} " +
-                // Fallback for native HLS support (Safari)
-                "else if (video.canPlayType('application/vnd.apple.mpegurl')) {" +
-                "   video.src = src;" +
-                "   video.addEventListener('loadedmetadata', function() {" +
-                "       if(startTime > 0) video.currentTime = startTime;" +
-                // "       video.play();" +
-                "   });" +
-                "}";
+        getElement().executeJs(js, playerUniqueId, hlsUrl, getElement());
+    }
 
-        getElement().executeJs(js, playerUniqueId, hlsUrl);
+    private void initializeControlsOverlay() {
+        String overlayHtml = """
+                <button class="hls-settings-btn" id="%s_settings_btn" title="Settings">⚙</button>
+                <div class="hls-settings-panel" id="%s_settings_panel">
+                    <div class="hls-panel-section">
+                        <div class="hls-panel-header">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                            </svg>
+                            Audio
+                        </div>
+                        <ul class="hls-track-list" id="%s_audio_list">
+                            <li class="hls-no-tracks">Loading...</li>
+                        </ul>
+                    </div>
+                    <div class="hls-panel-section">
+                        <div class="hls-panel-header">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6v-2zm0 4h8v2H6v-2zm10 0h2v2h-2v-2zm-6-4h8v2h-8v-2z"/>
+                            </svg>
+                            Subtitles
+                        </div>
+                        <ul class="hls-track-list" id="%s_subtitle_list">
+                            <li class="hls-no-tracks">Loading...</li>
+                        </ul>
+                    </div>
+                </div>
+                """.formatted(playerUniqueId, playerUniqueId, playerUniqueId, playerUniqueId);
+
+        String overlayJs = """
+                (function() {
+                    var playerId = $0;
+                    var overlay = document.getElementById(playerId + '_overlay');
+                    if (!overlay) return;
+                
+                    overlay.innerHTML = $1;
+                
+                    var settingsBtn = document.getElementById(playerId + '_settings_btn');
+                    var settingsPanel = document.getElementById(playerId + '_settings_panel');
+                
+                    if (settingsBtn && settingsPanel) {
+                        settingsBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            settingsPanel.classList.toggle('open');
+                        });
+                
+                        document.addEventListener('click', function(e) {
+                            if (!overlay.contains(e.target)) {
+                                settingsPanel.classList.remove('open');
+                            }
+                        });
+                    }
+                
+                    window.updateTrackUI = function(pid) {
+                        var audioTracks = window['hls_audio_tracks_' + pid] || [];
+                        var subtitleTracks = window['hls_subtitle_tracks_' + pid] || [];
+                        var currentAudio = window['hls_current_audio_' + pid];
+                        var currentSubtitle = window['hls_current_subtitle_' + pid];
+                
+                        var audioList = document.getElementById(pid + '_audio_list');
+                        var subtitleList = document.getElementById(pid + '_subtitle_list');
+                
+                        if (audioList) {
+                            if (audioTracks.length === 0) {
+                                audioList.innerHTML = '<li class="hls-no-tracks">No audio tracks available</li>';
+                            } else {
+                                var audioHtml = '';
+                                for (var i = 0; i < audioTracks.length; i++) {
+                                    var track = audioTracks[i];
+                                    var isActive = track.index === currentAudio;
+                                    var langStr = track.lang !== 'und' ? ' (' + track.lang + ')' : '';
+                                    audioHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
+                                    audioHtml += 'data-track-type="audio" data-track-index="' + track.index + '">';
+                                    audioHtml += track.name + langStr + '</li>';
+                                }
+                                audioList.innerHTML = audioHtml;
+                            }
+                        }
+                
+                        if (subtitleList) {
+                            var subtitleHtml = '<li class="hls-track-item' + (currentSubtitle === -1 ? ' active' : '') + '" ';
+                            subtitleHtml += 'data-track-type="subtitle" data-track-index="-1">Off</li>';
+                
+                            for (var i = 0; i < subtitleTracks.length; i++) {
+                                var track = subtitleTracks[i];
+                                var isActive = track.index === currentSubtitle;
+                                var langStr = track.lang !== 'und' ? ' (' + track.lang + ')' : '';
+                                subtitleHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
+                                subtitleHtml += 'data-track-type="subtitle" data-track-index="' + track.index + '">';
+                                subtitleHtml += track.name + langStr + '</li>';
+                            }
+                            subtitleList.innerHTML = subtitleHtml;
+                        }
+                
+                        var allItems = document.querySelectorAll('#' + pid + '_settings_panel .hls-track-item');
+                        for (var i = 0; i < allItems.length; i++) {
+                            (function(item) {
+                                item.onclick = function() {
+                                    var type = this.getAttribute('data-track-type');
+                                    var index = parseInt(this.getAttribute('data-track-index'));
+                                    var hls = window['hls_instance_' + pid];
+                                    if (hls) {
+                                        if (type === 'audio') {
+                                            hls.audioTrack = index;
+                                        } else if (type === 'subtitle') {
+                                            hls.subtitleTrack = index;
+                                        }
+                                    }
+                                };
+                            })(allItems[i]);
+                        }
+                    };
+                
+                    window.handleNativeHLSTracks = function(video, componentEl, pid) {
+                        var audioTracks = [];
+                        var subtitleTracks = [];
+                
+                        if (video.audioTracks) {
+                            for (var i = 0; i < video.audioTracks.length; i++) {
+                                var track = video.audioTracks[i];
+                                audioTracks.push({
+                                    id: track.id || i,
+                                    index: i,
+                                    name: track.label || ('Audio ' + (i + 1)),
+                                    lang: track.language || 'und',
+                                    type: 'audio'
+                                });
+                            }
+                        }
+                
+                        if (video.textTracks) {
+                            for (var i = 0; i < video.textTracks.length; i++) {
+                                var track = video.textTracks[i];
+                                if (track.kind === 'subtitles' || track.kind === 'captions') {
+                                    subtitleTracks.push({
+                                        id: i,
+                                        index: i,
+                                        name: track.label || ('Subtitle ' + (i + 1)),
+                                        lang: track.language || 'und',
+                                        type: 'subtitle'
+                                    });
+                                }
+                            }
+                        }
+                
+                        window['hls_audio_tracks_' + pid] = audioTracks;
+                        window['hls_subtitle_tracks_' + pid] = subtitleTracks;
+                        window['hls_current_audio_' + pid] = 0;
+                        window['hls_current_subtitle_' + pid] = -1;
+                
+                        componentEl.$server.onAudioTracksLoaded(JSON.stringify(audioTracks));
+                        componentEl.$server.onSubtitleTracksLoaded(JSON.stringify(subtitleTracks));
+                
+                        window.updateTrackUI(pid);
+                    };
+                })();
+                """;
+
+        getElement().executeJs(overlayJs, playerUniqueId, overlayHtml);
+    }
+
+    // ========== Client Callable Methods ==========
+
+    @ClientCallable
+    public void onAudioTracksLoaded(String tracksJson) {
+        audioTracks.clear();
+        try {
+            Gson gson = new Gson();
+            TrackInfo[] tracks = gson.fromJson(tracksJson, TrackInfo[].class);
+            for (TrackInfo track : tracks) {
+                audioTracks.add(track);
+            }
+            if (onAudioTracksLoaded != null) {
+                onAudioTracksLoaded.accept(new ArrayList<>(audioTracks));
+            }
+        } catch (Exception e) {
+            System.err.println("Error parsing audio tracks: " + e.getMessage());
+        }
+    }
+
+    @ClientCallable
+    public void onSubtitleTracksLoaded(String tracksJson) {
+        subtitleTracks.clear();
+        try {
+            Gson gson = new Gson();
+            TrackInfo[] tracks = gson.fromJson(tracksJson, TrackInfo[].class);
+            for (TrackInfo track : tracks) {
+                subtitleTracks.add(track);
+            }
+            if (onSubtitleTracksLoaded != null) {
+                onSubtitleTracksLoaded.accept(new ArrayList<>(subtitleTracks));
+            }
+        } catch (Exception e) {
+            System.err.println("Error parsing subtitle tracks: " + e.getMessage());
+        }
+    }
+
+    @ClientCallable
+    public void onAudioTrackChanged(int trackIndex) {
+        this.currentAudioTrackIndex = trackIndex;
+        if (onAudioTrackChanged != null) {
+            onAudioTrackChanged.accept(trackIndex);
+        }
+    }
+
+    @ClientCallable
+    public void onSubtitleTrackChanged(int trackIndex) {
+        this.currentSubtitleTrackIndex = trackIndex;
+        if (onSubtitleTrackChanged != null) {
+            onSubtitleTrackChanged.accept(trackIndex);
+        }
+    }
+
+    // ========== Public API Methods ==========
+
+    public void setAudioTrack(int index) {
+        String js = """
+                (function() {
+                    var hls = window['hls_instance_' + $0];
+                    if (hls && hls.audioTracks && hls.audioTracks.length > $1) {
+                        hls.audioTrack = $1;
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId, index);
+    }
+
+    public void setSubtitleTrack(int index) {
+        String js = """
+                (function() {
+                    var hls = window['hls_instance_' + $0];
+                    if (hls) {
+                        hls.subtitleTrack = $1;
+                    }
+                    var video = document.getElementById($0);
+                    if (video && video.textTracks) {
+                        for (var i = 0; i < video.textTracks.length; i++) {
+                            video.textTracks[i].mode = (i === $1) ? 'showing' : 'hidden';
+                        }
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId, index);
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        // Clean up HLS instance to prevent memory leaks
-        getElement().executeJs(
-                "if (window['hls_instance_' + $0]) {" +
-                        "   window['hls_instance_' + $0].destroy();" +
-                        "   delete window['hls_instance_' + $0];" +
-                        "}", playerUniqueId
-        );
+        String js = """
+                (function() {
+                    var playerId = $0;
+                    if (window['hls_instance_' + playerId]) {
+                        window['hls_instance_' + playerId].destroy();
+                        delete window['hls_instance_' + playerId];
+                    }
+                    delete window['hls_audio_tracks_' + playerId];
+                    delete window['hls_subtitle_tracks_' + playerId];
+                    delete window['hls_current_audio_' + playerId];
+                    delete window['hls_current_subtitle_' + playerId];
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId);
         super.onDetach(detachEvent);
     }
 
-    // --- Controls and Utilities ---
-
     private void initializeSubtitleShiftFunction() {
-        // This function needs to be global or attached to window to be called from outside
-        // Using the specific video ID to ensure we target correct player
-        getElement().executeJs(
-                "window.shiftSubtitles_" + playerUniqueId + " = (lang, delay) => {" +
-                        "  const video = document.getElementById('" + playerUniqueId + "');" +
-                        "  if (!video || !video.textTracks) return;" +
-                        "  " +
-                        "  for (let track of video.textTracks) {" +
-                        "    if (track.language === lang || track.label.toLowerCase() === lang) {" +
-                        "      if (track.cues) {" +
-                        "        for (let cue of track.cues) {" +
-                        "          cue.startTime = Math.max(0, cue.startTime + delay);" +
-                        "          cue.endTime = Math.max(0, cue.endTime + delay);" +
-                        "        }" +
-                        "      }" +
-                        "    }" +
-                        "  }" +
-                        "};"
-        );
+        String js = """
+                window['shiftSubtitles_%s'] = function(lang, delay) {
+                    var video = document.getElementById('%s');
+                    if (!video || !video.textTracks) return;
+                    for (var i = 0; i < video.textTracks.length; i++) {
+                        var track = video.textTracks[i];
+                        if (track.language === lang || track.label.toLowerCase() === lang) {
+                            if (track.cues) {
+                                for (var j = 0; j < track.cues.length; j++) {
+                                    var cue = track.cues[j];
+                                    cue.startTime = Math.max(0, cue.startTime + delay);
+                                    cue.endTime = Math.max(0, cue.endTime + delay);
+                                }
+                            }
+                        }
+                    }
+                };
+                """.formatted(playerUniqueId, playerUniqueId);
+        getElement().executeJs(js);
     }
 
     public void setCurrentTime(double time) {
-        getElement().executeJs(
-                "const video = document.getElementById($0);" +
-                        "if (video) { video.currentTime = $1; }",
-                playerUniqueId, time
-        );
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    if (video) {
+                        video.currentTime = $1;
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId, time);
     }
 
     public void toggleSubtitles() {
-        // Toggle logic: if any track is showing, hide all. Else show first.
-        getElement().executeJs(
-                "const video = document.getElementById($0);" +
-                        "if (video && video.textTracks.length >= 1) {" +
-                        "   let anyShowing = false;" +
-                        "   for(let i=0; i < video.textTracks.length; i++) {" +
-                        "       if(video.textTracks[i].mode === 'showing') {" +
-                        "           anyShowing = true; break;" +
-                        "       }" +
-                        "   }" +
-                        "   if(anyShowing) {" +
-                        "       for(let i=0; i < video.textTracks.length; i++) video.textTracks[i].mode = 'hidden';" +
-                        "   } else {" +
-                        "       video.textTracks[0].mode = 'showing';" +
-                        "   }" +
-                        "}",
-                playerUniqueId
-        );
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    if (video && video.textTracks.length >= 1) {
+                        var anyShowing = false;
+                        for (var i = 0; i < video.textTracks.length; i++) {
+                            if (video.textTracks[i].mode === 'showing') {
+                                anyShowing = true;
+                                break;
+                            }
+                        }
+                        if (anyShowing) {
+                            for (var i = 0; i < video.textTracks.length; i++) {
+                                video.textTracks[i].mode = 'hidden';
+                            }
+                        } else {
+                            video.textTracks[0].mode = 'showing';
+                        }
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId);
     }
 
     public void togglePlayPause() {
-        getElement().executeJs(
-                "const video = document.getElementById($0);" +
-                        "if (video) {" +
-                        "  if (video.paused) { video.play(); } else { video.pause(); }" +
-                        "}",
-                playerUniqueId
-        );
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    if (video) {
+                        if (video.paused) {
+                            video.play();
+                        } else {
+                            video.pause();
+                        }
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId);
     }
 
     public void seek(double seconds) {
-        getElement().executeJs(
-                "const video = document.getElementById($0);" +
-                        "if (video) { video.currentTime += $1; }",
-                playerUniqueId, seconds
-        );
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    if (video) {
+                        video.currentTime += $1;
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId, seconds);
     }
 
     public void toggleFullscreen() {
-        getElement().executeJs(
-                "const video = document.getElementById($0);" +
-                        "if (video) {" +
-                        "  if (document.fullscreenElement === video) {" +
-                        "    document.exitFullscreen();" +
-                        "  } else if (video.requestFullscreen) {" +
-                        "      video.requestFullscreen();" +
-                        "  } else if (video.webkitRequestFullscreen) {" +
-                        "      video.webkitRequestFullscreen();" + // Safari
-                        "  }" +
-                        "}",
-                playerUniqueId
-        );
+        String js = """
+                (function() {
+                    var video = document.getElementById($0);
+                    if (video) {
+                        if (document.fullscreenElement === video) {
+                            document.exitFullscreen();
+                        } else if (video.requestFullscreen) {
+                            video.requestFullscreen();
+                        } else if (video.webkitRequestFullscreen) {
+                            video.webkitRequestFullscreen();
+                        }
+                    }
+                })();
+                """;
+        getElement().executeJs(js, playerUniqueId);
     }
 
     public void shiftSubtitles(String language, Double delay) {
-        // Call the specific namespaced function
-        getElement().executeJs("if(window.shiftSubtitles_" + playerUniqueId + ") window.shiftSubtitles_" + playerUniqueId + "($0, $1)", language, delay);
+        String js = """
+                (function() {
+                    var fn = window['shiftSubtitles_%s'];
+                    if (fn) {
+                        fn($0, $1);
+                    }
+                })();
+                """.formatted(playerUniqueId);
+        getElement().executeJs(js, language, delay);
     }
 
-    // Getter for the unique DOM ID if needed externally
-    public String getPlayerUniqueId() {
-        return playerUniqueId;
+    // ========== Track Info Class ==========
+
+    @Setter
+    @Getter
+    public static final class TrackInfo {
+        private int id;
+        private int index;
+        private String name;
+        private String lang;
+        private String type;
+
+        public TrackInfo() {
+        }
+
+        public TrackInfo(int id, int index, String name, String lang, String type) {
+            this.id = id;
+            this.index = index;
+            this.name = name;
+            this.lang = lang;
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            return name + (!"und".equals(lang) ? " (" + lang + ")" : "");
+        }
     }
 }
