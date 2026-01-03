@@ -148,28 +148,66 @@ public class VideoController {
         if (AuthService.getLoggedUserId() == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+
         List<Metadata> metadata = videoManager.loadById(videoId);
+        if (metadata.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
 
         Path baseDir = Path.of(videoManager.getSrc(metadata.get(0)));
 
-        String path = request.getRequestURI()
-                .replace("/storage/videos/hls/" + videoId + "/", "");
+        String fullPath = request.getRequestURI();
+        String prefix = "/storage/videos/hls/" + videoId + "/";
+
+        if (!fullPath.startsWith(prefix)) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String path = fullPath.substring(prefix.length());
+
+        // Decode URL encoded characters (spaces, etc.)
+        path = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
 
         Path file = baseDir.resolve(path).normalize();
 
-        if (!file.startsWith(baseDir)) return ResponseEntity.status(403).build();
+        // Security check
+        if (!file.startsWith(baseDir)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
-        if (!Files.exists(file)) return ResponseEntity.notFound().build();
+        if (!Files.exists(file)) {
+            log.error("HLS file not found: " + file);
+            return ResponseEntity.notFound().build();
+        }
 
-        String ct = file.toString().endsWith(".m3u8") ? "application/vnd.apple.mpegurl" :
-                file.toString().endsWith(".ts")   ? "video/mp2t" : "application/octet-stream";
+        // Determine content type
+        String fileName = file.toString().toLowerCase();
+        String contentType;
+        if (fileName.endsWith(".m3u8")) {
+            contentType = "application/vnd.apple.mpegurl";
+        } else if (fileName.endsWith(".ts")) {
+            contentType = "video/mp2t";
+        } else if (fileName.endsWith(".aac")) {
+            contentType = "audio/aac";
+        } else if (fileName.endsWith(".mp4") || fileName.endsWith(".m4s")) {
+            contentType = "video/mp4";
+        } else if (fileName.endsWith(".m4a")) {
+            contentType = "audio/mp4";
+        } else if (fileName.endsWith(".vtt")) {
+            contentType = "text/vtt";
+        } else {
+            contentType = "application/octet-stream";
+        }
+
+        // Cache control
+        String cacheControl = fileName.endsWith(".m3u8") ? "no-cache" : "max-age=3600";
 
         return ResponseEntity.ok()
-                .header("Cache-Control", file.toString().endsWith(".ts") ? "max-age=3600" : "no-cache")
-                .contentType(MediaType.parseMediaType(ct))
+                .header("Cache-Control", cacheControl)
+                .header("Access-Control-Allow-Origin", "*")
+                .contentType(MediaType.parseMediaType(contentType))
                 .body(new UrlResource(file.toUri()));
     }
-
 
     @GetMapping("/video/{videoId}")
     public ResponseEntity<ResourceRegion> getVideo(

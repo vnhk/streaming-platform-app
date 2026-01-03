@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.view.player;
 
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
 import com.google.gson.Gson;
 import com.vaadin.flow.component.AttachEvent;
@@ -17,6 +18,7 @@ import java.util.function.Consumer;
 @Getter
 @Setter
 public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final Element videoElement;
     private final Element controlsOverlay;
     private final String currentVideoFolder;
@@ -206,111 +208,250 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         String hlsUrl = "/storage/videos/hls/" + currentVideoFolder + "/master.m3u8";
 
         String js = """
-                (function() {
-                    var video = document.getElementById($0);
-                    var src = $1;
-                    var startTime = parseFloat(video.getAttribute('data-start-time') || '0');
-                    var componentEl = $2;
-                    var playerId = $0;
-                
-                    function notifyTracksLoaded(hls) {
-                        var audioTracks = hls.audioTracks.map(function(track, idx) {
-                            return {
-                                id: track.id,
-                                index: idx,
-                                name: track.name || ('Audio ' + (idx + 1)),
+            (function() {
+                var video = document.getElementById($0);
+                var src = $1;
+                var startTime = parseFloat(video.getAttribute('data-start-time') || '0');
+                var componentEl = $2;
+                var playerId = $0;
+                var tracksNotifiedSuccessfully = false;
+            
+                function notifyTracksLoaded(hls, source) {
+                    console.log('[HLS] ===== notifyTracksLoaded from: ' + source + ' =====');
+                    console.log('[HLS] hls object:', hls);
+                    console.log('[HLS] hls.audioTracks:', hls.audioTracks);
+                    console.log('[HLS] hls.audioTracks length:', hls.audioTracks ? hls.audioTracks.length : 'null/undefined');
+                    console.log('[HLS] hls.subtitleTracks:', hls.subtitleTracks);
+                    console.log('[HLS] hls.levels:', hls.levels);
+                    
+                    var audioTracks = [];
+                    var subtitleTracks = [];
+                    
+                    // Try to get audio tracks
+                    if (hls.audioTracks && hls.audioTracks.length > 0) {
+                        console.log('[HLS] Found ' + hls.audioTracks.length + ' audio tracks!');
+                        for (var i = 0; i < hls.audioTracks.length; i++) {
+                            var track = hls.audioTracks[i];
+                            console.log('[HLS] Audio track ' + i + ':', JSON.stringify(track));
+                            audioTracks.push({
+                                id: track.id !== undefined ? track.id : i,
+                                index: i,
+                                name: track.name || track.lang || ('Audio ' + (i + 1)),
                                 lang: track.lang || 'und',
                                 type: 'audio'
-                            };
-                        });
-                
-                        var subtitleTracks = hls.subtitleTracks.map(function(track, idx) {
-                            return {
-                                id: track.id,
-                                index: idx,
-                                name: track.name || track.lang || ('Subtitle ' + (idx + 1)),
+                            });
+                        }
+                        tracksNotifiedSuccessfully = true;
+                    } else {
+                        console.log('[HLS] No audio tracks found yet');
+                    }
+                    
+                    // Try to get subtitle tracks
+                    if (hls.subtitleTracks && hls.subtitleTracks.length > 0) {
+                        for (var i = 0; i < hls.subtitleTracks.length; i++) {
+                            var track = hls.subtitleTracks[i];
+                            subtitleTracks.push({
+                                id: track.id !== undefined ? track.id : i,
+                                index: i,
+                                name: track.name || track.lang || ('Subtitle ' + (i + 1)),
                                 lang: track.lang || 'und',
                                 type: 'subtitle'
-                            };
-                        });
-                
-                        window['hls_audio_tracks_' + playerId] = audioTracks;
-                        window['hls_subtitle_tracks_' + playerId] = subtitleTracks;
-                        window['hls_current_audio_' + playerId] = hls.audioTrack;
-                        window['hls_current_subtitle_' + playerId] = hls.subtitleTrack;
-                
+                            });
+                        }
+                    }
+                    
+                    // Check HTML5 textTracks
+                    if (video.textTracks && video.textTracks.length > 0) {
+                        var existingLangs = subtitleTracks.map(function(t) { return t.lang; });
+                        for (var i = 0; i < video.textTracks.length; i++) {
+                            var track = video.textTracks[i];
+                            if ((track.kind === 'subtitles' || track.kind === 'captions') 
+                                && existingLangs.indexOf(track.language) === -1) {
+                                subtitleTracks.push({
+                                    id: 1000 + i,
+                                    index: 1000 + i,
+                                    name: track.label || ('Subtitle ' + (i + 1)),
+                                    lang: track.language || 'und',
+                                    type: 'subtitle',
+                                    isTextTrack: true
+                                });
+                            }
+                        }
+                    }
+            
+                    console.log('[HLS] Final audioTracks:', JSON.stringify(audioTracks));
+                    console.log('[HLS] Final subtitleTracks:', JSON.stringify(subtitleTracks));
+            
+                    window['hls_audio_tracks_' + playerId] = audioTracks;
+                    window['hls_subtitle_tracks_' + playerId] = subtitleTracks;
+                    window['hls_current_audio_' + playerId] = hls.audioTrack >= 0 ? hls.audioTrack : 0;
+                    window['hls_current_subtitle_' + playerId] = hls.subtitleTrack >= 0 ? hls.subtitleTrack : -1;
+            
+                    try {
                         componentEl.$server.onAudioTracksLoaded(JSON.stringify(audioTracks));
                         componentEl.$server.onSubtitleTracksLoaded(JSON.stringify(subtitleTracks));
+                    } catch(e) {
+                        console.error('[HLS] Error calling server:', e);
+                    }
+            
+                    if (typeof window.updateTrackUI === 'function') {
+                        window.updateTrackUI(playerId);
+                    }
+                    
+                    return audioTracks.length > 0;
+                }
                 
+                // Polling function to check for tracks
+                function pollForTracks(hls, maxAttempts, attempt) {
+                    attempt = attempt || 1;
+                    console.log('[HLS] Polling for tracks, attempt ' + attempt + '/' + maxAttempts);
+                    
+                    if (tracksNotifiedSuccessfully) {
+                        console.log('[HLS] Tracks already loaded, stopping poll');
+                        return;
+                    }
+                    
+                    if (hls.audioTracks && hls.audioTracks.length > 0) {
+                        console.log('[HLS] Poll found tracks!');
+                        notifyTracksLoaded(hls, 'POLL attempt ' + attempt);
+                        return;
+                    }
+                    
+                    if (attempt < maxAttempts) {
+                        setTimeout(function() {
+                            pollForTracks(hls, maxAttempts, attempt + 1);
+                        }, 500);
+                    } else {
+                        console.log('[HLS] Max polling attempts reached, no audio tracks found');
+                        // Still update UI to show "No audio tracks"
+                        notifyTracksLoaded(hls, 'POLL final (no tracks)');
+                    }
+                }
+            
+                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                    console.log('[HLS] Using HLS.js version:', Hls.version);
+                    
+                    var hls = new Hls({
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        debug: false
+                    });
+                    
+                    // Store reference immediately
+                    window['hls_instance_' + playerId] = hls;
+                    
+                    hls.loadSource(src);
+                    hls.attachMedia(video);
+                    
+                    // Log all events for debugging
+                    var importantEvents = [
+                        'MANIFEST_LOADING',
+                        'MANIFEST_LOADED', 
+                        'MANIFEST_PARSED',
+                        'AUDIO_TRACKS_UPDATED',
+                        'AUDIO_TRACK_LOADED',
+                        'AUDIO_TRACK_SWITCHING',
+                        'AUDIO_TRACK_SWITCHED',
+                        'SUBTITLE_TRACKS_UPDATED',
+                        'LEVEL_LOADED'
+                    ];
+                    
+                    importantEvents.forEach(function(eventName) {
+                        if (Hls.Events[eventName]) {
+                            hls.on(Hls.Events[eventName], function(event, data) {
+                                console.log('[HLS Event] ' + eventName, data);
+                                
+                                // Check audioTracks on every important event
+                                if (hls.audioTracks && hls.audioTracks.length > 0 && !tracksNotifiedSuccessfully) {
+                                    console.log('[HLS] Found tracks during ' + eventName);
+                                    notifyTracksLoaded(hls, eventName);
+                                }
+                            });
+                        }
+                    });
+            
+                    hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                        console.log('[HLS] MANIFEST_PARSED');
+                        console.log('[HLS] data.levels:', data.levels);
+                        console.log('[HLS] data.audioTracks:', data.audioTracks);
+                        console.log('[HLS] hls.audioTracks at MANIFEST_PARSED:', hls.audioTracks);
+                        
+                        if (startTime > 0) {
+                            video.currentTime = startTime;
+                        }
+                        
+                        // Try immediately
+                        if (hls.audioTracks && hls.audioTracks.length > 0) {
+                            notifyTracksLoaded(hls, 'MANIFEST_PARSED immediate');
+                        } else {
+                            // Start polling
+                            console.log('[HLS] No tracks yet, starting polling...');
+                            pollForTracks(hls, 10, 1);
+                        }
+                    });
+                    
+                    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function(event, data) {
+                        console.log('[HLS] AUDIO_TRACKS_UPDATED:', data);
+                        if (!tracksNotifiedSuccessfully) {
+                            notifyTracksLoaded(hls, 'AUDIO_TRACKS_UPDATED');
+                        }
+                    });
+            
+                    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function(event, data) {
+                        console.log('[HLS] AUDIO_TRACK_SWITCHED to:', data.id);
+                        window['hls_current_audio_' + playerId] = data.id;
+                        try {
+                            componentEl.$server.onAudioTrackChanged(data.id);
+                        } catch(e) {}
                         if (typeof window.updateTrackUI === 'function') {
                             window.updateTrackUI(playerId);
                         }
-                    }
-                
-                    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                        var hls = new Hls({
-                            enableWorker: true,
-                            lowLatencyMode: false
-                        });
-                        hls.loadSource(src);
-                        hls.attachMedia(video);
-                
-                        hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-                            if (startTime > 0) {
-                                video.currentTime = startTime;
-                            }
-                            notifyTracksLoaded(hls);
-                        });
-                
-                        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function(event, data) {
-                            window['hls_current_audio_' + playerId] = data.id;
-                            componentEl.$server.onAudioTrackChanged(data.id);
-                            if (typeof window.updateTrackUI === 'function') {
-                                window.updateTrackUI(playerId);
-                            }
-                        });
-                
-                        hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, function(event, data) {
-                            window['hls_current_subtitle_' + playerId] = data.id;
+                    });
+            
+                    hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, function(event, data) {
+                        console.log('[HLS] SUBTITLE_TRACK_SWITCH to:', data.id);
+                        window['hls_current_subtitle_' + playerId] = data.id;
+                        try {
                             componentEl.$server.onSubtitleTrackChanged(data.id);
-                            if (typeof window.updateTrackUI === 'function') {
-                                window.updateTrackUI(playerId);
+                        } catch(e) {}
+                        if (typeof window.updateTrackUI === 'function') {
+                            window.updateTrackUI(playerId);
+                        }
+                    });
+            
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('[HLS] Error:', data.type, data.details, data);
+                        if (data.fatal) {
+                            switch (data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    hls.destroy();
+                                    break;
                             }
-                        });
-                
-                        hls.on(Hls.Events.ERROR, function(event, data) {
-                            if (data.fatal) {
-                                switch (data.type) {
-                                    case Hls.ErrorTypes.NETWORK_ERROR:
-                                        console.error('HLS Network error, trying to recover...');
-                                        hls.startLoad();
-                                        break;
-                                    case Hls.ErrorTypes.MEDIA_ERROR:
-                                        console.error('HLS Media error, trying to recover...');
-                                        hls.recoverMediaError();
-                                        break;
-                                    default:
-                                        hls.destroy();
-                                        break;
-                                }
-                            }
-                        });
-                
-                        window['hls_instance_' + playerId] = hls;
-                
-                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                        video.src = src;
-                        video.addEventListener('loadedmetadata', function() {
-                            if (startTime > 0) {
-                                video.currentTime = startTime;
-                            }
-                            if (typeof window.handleNativeHLSTracks === 'function') {
-                                window.handleNativeHLSTracks(video, componentEl, playerId);
-                            }
-                        });
-                    }
-                })();
-                """;
+                        }
+                    });
+            
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    console.log('[HLS] Using native HLS (Safari)');
+                    video.src = src;
+                    video.addEventListener('loadedmetadata', function() {
+                        if (startTime > 0) {
+                            video.currentTime = startTime;
+                        }
+                        if (typeof window.handleNativeHLSTracks === 'function') {
+                            window.handleNativeHLSTracks(video, componentEl, playerId);
+                        }
+                    });
+                } else {
+                    console.error('[HLS] HLS not supported!');
+                }
+            })();
+            """;
 
         getElement().executeJs(js, playerUniqueId, hlsUrl, getElement());
     }
@@ -491,7 +632,7 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                 onAudioTracksLoaded.accept(new ArrayList<>(audioTracks));
             }
         } catch (Exception e) {
-            System.err.println("Error parsing audio tracks: " + e.getMessage());
+            log.error("Error parsing audio tracks: " + e.getMessage());
         }
     }
 
@@ -508,7 +649,7 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                 onSubtitleTracksLoaded.accept(new ArrayList<>(subtitleTracks));
             }
         } catch (Exception e) {
-            System.err.println("Error parsing subtitle tracks: " + e.getMessage());
+            log.error("Error parsing subtitle tracks: " + e.getMessage());
         }
     }
 
