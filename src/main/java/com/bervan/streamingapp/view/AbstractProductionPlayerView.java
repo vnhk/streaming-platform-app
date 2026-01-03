@@ -7,7 +7,7 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.WatchDetails;
 import com.bervan.streamingapp.config.ProductionData;
-import com.bervan.streamingapp.config.structure.*;
+import com.bervan.streamingapp.config.structure.mp4.*;
 import com.vaadin.flow.component.*;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
@@ -82,17 +82,17 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     private Optional<Metadata> findVideoById(String videoId) {
         Collection<ProductionData> productions = streamingProductionData.values();
         for (ProductionData productionData : productions) {
-            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-            if (productionStructure instanceof MovieRootProductionStructure) {
-                List<Metadata> videos = ((MovieRootProductionStructure) productionStructure).getVideos();
+            MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MP4MovieRootProductionStructure) {
+                List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideos();
                 Optional<Metadata> videoOpt = videos.stream().filter(video -> video.getId().toString().equals(videoId)).findFirst();
                 if (videoOpt.isPresent()) {
                     return videoOpt;
                 }
-            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
-                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
-                for (SeasonStructure season : seasons) {
-                    for (EpisodeStructure episode : season.getEpisodes()) {
+            } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
+                List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (MP4SeasonStructure season : seasons) {
+                    for (MP4EpisodeStructure episode : season.getEpisodes()) {
                         if (episode.getVideo().getId().toString().equals(videoId)) {
                             return Optional.of(episode.getVideo());
                         }

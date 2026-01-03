@@ -10,7 +10,7 @@ import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.MetadataByPathAndType;
 import com.bervan.streamingapp.config.ProductionData;
-import com.bervan.streamingapp.config.structure.*;
+import com.bervan.streamingapp.config.structure.mp4.*;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -360,17 +360,17 @@ public class VideoManager {
     public Optional<Metadata> findPosterByFolderId(String folderId, Map<String, ProductionData> streamingProductionData) {
         Collection<ProductionData> productions = streamingProductionData.values();
         for (ProductionData productionData : productions) {
-            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-            if (productionStructure instanceof MovieRootProductionStructure) {
+            MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MP4MovieRootProductionStructure) {
                 //for movies we get main poster
                 if (productionStructure.getMetadataId().toString().equals(folderId)) {
                     return Optional.ofNullable(productionStructure.getPoster());
                 }
-            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
+            } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
                 //for tv series we get episode poster
-                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
-                for (SeasonStructure season : seasons) {
-                    for (EpisodeStructure episode : season.getEpisodes()) {
+                List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (MP4SeasonStructure season : seasons) {
+                    for (MP4EpisodeStructure episode : season.getEpisodes()) {
                         if (episode.getMetadataId().toString().equals(folderId)) {
                             return Optional.ofNullable(episode.getPoster());
                         }
@@ -388,19 +388,19 @@ public class VideoManager {
     public Map<String, Metadata> findSubtitlesByVideoId(String videoId, Map<String, ProductionData> streamingProductionData) {
         Collection<ProductionData> productions = streamingProductionData.values();
         for (ProductionData productionData : productions) {
-            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-            if (productionStructure instanceof MovieRootProductionStructure) {
+            MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MP4MovieRootProductionStructure) {
                 //for movies we get subtitles from the main folder
-                for (Metadata video : ((MovieRootProductionStructure) productionStructure).getVideos()) {
+                for (Metadata video : ((MP4MovieRootProductionStructure) productionStructure).getVideos()) {
                     if (videoId.equals(video.getId().toString())) {
-                        return ((MovieRootProductionStructure) productionStructure).getSubtitles();
+                        return ((MP4MovieRootProductionStructure) productionStructure).getSubtitles();
                     }
                 }
-            } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
+            } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
                 //for tv series we go to the episode folder
-                List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
-                for (SeasonStructure season : seasons) {
-                    for (EpisodeStructure episode : season.getEpisodes()) {
+                List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (MP4SeasonStructure season : seasons) {
+                    for (MP4EpisodeStructure episode : season.getEpisodes()) {
                         Metadata video = episode.getVideo();
                         if (video != null && videoId.equals(video.getId().toString())) {
                             return episode.getSubtitles();

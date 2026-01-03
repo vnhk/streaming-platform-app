@@ -5,7 +5,7 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
-import com.bervan.streamingapp.config.structure.*;
+import com.bervan.streamingapp.config.structure.mp4.*;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -187,16 +187,16 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     }
 
     private String findFirstVideoId(ProductionData productionData) {
-        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-        if (productionStructure instanceof MovieRootProductionStructure) {
-            List<Metadata> videos = ((MovieRootProductionStructure) productionStructure).getVideos();
+        MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+        if (productionStructure instanceof MP4MovieRootProductionStructure) {
+            List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideos();
             if (videos != null && !videos.isEmpty()) {
                 return videos.get(0).getId().toString();
             }
-        } else if (productionStructure instanceof TvSeriesRootProductionStructure) {
-            List<SeasonStructure> seasons = ((TvSeriesRootProductionStructure) productionStructure).getSeasons();
+        } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
+            List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
             if (seasons != null && !seasons.isEmpty()) {
-                List<EpisodeStructure> episodes = seasons.get(0).getEpisodes();
+                List<MP4EpisodeStructure> episodes = seasons.get(0).getEpisodes();
                 if (episodes != null && !episodes.isEmpty()) {
                     Metadata video = episodes.get(0).getVideo();
                     if (video != null) {
@@ -224,15 +224,15 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         Div result = getScrollableLayoutParent();
 
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
-            TvSeriesRootProductionStructure productionStructure = (TvSeriesRootProductionStructure) productionData.getProductionStructure();
-            for (SeasonStructure season : productionStructure.getSeasons()) {
+            MP4TvSeriesRootProductionStructure productionStructure = (MP4TvSeriesRootProductionStructure) productionData.getProductionStructure();
+            for (MP4SeasonStructure season : productionStructure.getSeasons()) {
                 result.add(createModernScrollableSection(season.getMetadataName(),
                         seasonVideosLayout(season, productionStructure.getPoster())));
             }
         }
 
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.MOVIE) {
-            MovieRootProductionStructure productionStructure = (MovieRootProductionStructure) productionData.getProductionStructure();
+            MP4MovieRootProductionStructure productionStructure = (MP4MovieRootProductionStructure) productionData.getProductionStructure();
             result.add(createModernScrollableSection("Episodes",
                     createVideosLayout(productionStructure.getVideos(), productionStructure.getPoster())));
         }
@@ -258,14 +258,14 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         return scrollingLayout;
     }
 
-    private HorizontalLayout seasonVideosLayout(SeasonStructure seasonStructure, Metadata defaultPoster) {
+    private HorizontalLayout seasonVideosLayout(MP4SeasonStructure seasonStructure, Metadata defaultPoster) {
         int episodes = seasonStructure.getEpisodes().size();
 
-        List<EpisodeStructure> sortedEpisodesFolders = new ArrayList<>();
+        List<MP4EpisodeStructure> sortedEpisodesFolders = new ArrayList<>();
         for (int i = 1; i <= episodes; i++) {
             String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
-            for (EpisodeStructure episodeStructure : seasonStructure.getEpisodes()) {
+            for (MP4EpisodeStructure episodeStructure : seasonStructure.getEpisodes()) {
                 Matcher matcher = regex.matcher(episodeStructure.getMetadataName());
                 if (matcher.find()) {
                     Metadata video = episodeStructure.getVideo();
@@ -282,11 +282,11 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     }
 
 
-    protected HorizontalLayout createEpisodesLayout(List<EpisodeStructure> episodeStructures, Metadata defaultPoster) {
+    protected HorizontalLayout createEpisodesLayout(List<MP4EpisodeStructure> episodeStructures, Metadata defaultPoster) {
         HorizontalLayout scrollingLayout = getHorizontalScrollingLayout();
 
         int videoCounter = 1;
-        for (EpisodeStructure episodeStructure : episodeStructures) {
+        for (MP4EpisodeStructure episodeStructure : episodeStructures) {
             try {
                 Metadata video = episodeStructure.getVideo();
                 buildTile(defaultPoster, true, episodeStructure.getPoster(), video, videoCounter, scrollingLayout);
