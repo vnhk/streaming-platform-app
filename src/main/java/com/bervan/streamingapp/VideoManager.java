@@ -10,7 +10,11 @@ import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.MetadataByPathAndType;
 import com.bervan.streamingapp.config.ProductionData;
-import com.bervan.streamingapp.config.structure.mp4.*;
+import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -357,10 +361,10 @@ public class VideoManager {
     }
 
 
-    public Optional<Metadata> findPosterByFolderId(String folderId, Map<String, ProductionData> streamingProductionData) {
+    public Optional<Metadata> findMp4PosterByFolderId(String folderId, Map<String, ProductionData> streamingProductionData) {
         Collection<ProductionData> productions = streamingProductionData.values();
         for (ProductionData productionData : productions) {
-            MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
             if (productionStructure instanceof MP4MovieRootProductionStructure) {
                 //for movies we get main poster
                 if (productionStructure.getMetadataId().toString().equals(folderId)) {
@@ -385,10 +389,10 @@ public class VideoManager {
         return Optional.empty();
     }
 
-    public Map<String, Metadata> findSubtitlesByVideoId(String videoId, Map<String, ProductionData> streamingProductionData) {
+    public Map<String, Metadata> findMp4SubtitlesByVideoId(String videoId, Map<String, ProductionData> streamingProductionData) {
         Collection<ProductionData> productions = streamingProductionData.values();
         for (ProductionData productionData : productions) {
-            MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
             if (productionStructure instanceof MP4MovieRootProductionStructure) {
                 //for movies we get subtitles from the main folder
                 for (Metadata video : ((MP4MovieRootProductionStructure) productionStructure).getVideos()) {
@@ -410,5 +414,31 @@ public class VideoManager {
             }
         }
         return new HashMap<>();
+    }
+
+    public Optional<Metadata> findMp4VideoById(String videoId, Map<String, ProductionData> streamingProductionData) {
+
+        //instead of searching tree for all production, video player needs to know production id (send by parameter)
+        Collection<ProductionData> productions = streamingProductionData.values();
+        for (ProductionData productionData : productions) {
+            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+            if (productionStructure instanceof MP4MovieRootProductionStructure) {
+                List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideos();
+                Optional<Metadata> videoOpt = videos.stream().filter(video -> video.getId().toString().equals(videoId)).findFirst();
+                if (videoOpt.isPresent()) {
+                    return videoOpt;
+                }
+            } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
+                List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
+                for (MP4SeasonStructure season : seasons) {
+                    for (MP4EpisodeStructure episode : season.getEpisodes()) {
+                        if (episode.getVideo().getId().toString().equals(videoId)) {
+                            return Optional.of(episode.getVideo());
+                        }
+                    }
+                }
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Input;

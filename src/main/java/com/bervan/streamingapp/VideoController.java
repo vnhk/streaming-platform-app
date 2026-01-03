@@ -39,7 +39,7 @@ public class VideoController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
-            Optional<Metadata> poster = videoManager.findPosterByFolderId(folderId, streamingProductionData);
+            Optional<Metadata> poster = videoManager.findMp4PosterByFolderId(folderId, streamingProductionData);
 
             if (poster.isEmpty()) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
@@ -97,7 +97,7 @@ public class VideoController {
             }
 
 
-            Map<String, Metadata> subtitlesByVideoId = videoManager.findSubtitlesByVideoId(videoId, streamingProductionData);
+            Map<String, Metadata> subtitlesByVideoId = videoManager.findMp4SubtitlesByVideoId(videoId, streamingProductionData);
             if (subtitlesByVideoId == null) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }

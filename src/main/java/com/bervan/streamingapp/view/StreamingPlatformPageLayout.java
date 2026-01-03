@@ -3,6 +3,7 @@ package com.bervan.streamingapp.view;
 
 import com.bervan.common.MenuNavigationComponent;
 import com.bervan.common.service.AuthService;
+import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.icon.VaadinIcon;
 
 public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
