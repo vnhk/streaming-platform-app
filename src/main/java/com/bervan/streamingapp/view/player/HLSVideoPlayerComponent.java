@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.view.player;
 
+import com.bervan.streamingapp.config.ProductionData;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.dom.Element;
@@ -13,11 +14,13 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
     private final Element videoElement;
     private final String currentVideoFolder;
     private final String playerUniqueId;
+    private final ProductionData productionData;
     private final String componentId;
 
-    public HLSVideoPlayerComponent(String componentId, String currentVideoFolder, double startTime) {
+    public HLSVideoPlayerComponent(String componentId, String currentVideoFolder, double startTime, ProductionData productionData) {
         this.componentId = componentId;
         this.currentVideoFolder = currentVideoFolder;
+        this.productionData = productionData;
         // Create a unique DOM ID for this specific player instance
         this.playerUniqueId = componentId + "_" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -42,27 +45,12 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         video.setAttribute("controls", "");
         video.setAttribute("playsinline", "");
         // Poster image could be dynamic based on videoId
-        // video.setAttribute("poster", "/api/video/poster/" + videoId);
+         video.setAttribute("poster", "/storage/video/poster/" + currentVideoFolder);
         video.setAttribute("style", "width: 100%; height: 100%; object-fit: contain;");
 
-        // Subtitles - Assuming same endpoint structure as before
-        addSubtitleTrack(video, "en", "English", "/storage/videos/subtitles/" + currentVideoFolder + "/en", true);
-        addSubtitleTrack(video, "pl", "Polish", "/storage/videos/subtitles/" + currentVideoFolder + "/pl", false);
-        addSubtitleTrack(video, "es", "Polish", "/storage/videos/subtitles/" + currentVideoFolder + "/es", false);
+        addSubtitleTracks(video, currentVideoFolder);
 
         return video;
-    }
-
-    private void addSubtitleTrack(Element video, String lang, String label, String src, boolean isDefault) {
-        Element track = new Element("track");
-        track.setAttribute("kind", "subtitles");
-        track.setAttribute("src", src);
-        track.setAttribute("srclang", lang);
-        track.setAttribute("label", label);
-        if (isDefault) {
-            track.setAttribute("default", "");
-        }
-        video.appendChild(track);
     }
 
     @Override

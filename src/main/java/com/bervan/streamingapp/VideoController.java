@@ -4,6 +4,7 @@ import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -13,6 +14,7 @@ import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -139,52 +141,35 @@ public class VideoController {
         throw new RuntimeException(subtitle.getExtension() + " is not supported for subtitles!");
     }
 
-    @GetMapping("/hls/{videoId}/{filename:.+}")
-    public ResponseEntity<Resource> serveHlsContent(
-            @PathVariable String videoId,
-            @PathVariable String filename) {
-        try {
-            // Security check using AuthService
-            if (AuthService.getLoggedUserId() == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
+    @GetMapping("/hls/{videoId}/**")
+    public ResponseEntity<Resource> serveHls(HttpServletRequest request,
+                                             @PathVariable String videoId) throws Exception {
 
-            List<Metadata> metadata = videoManager.loadById(videoId);
-            if (metadata.size() != 1) {
-                log.warn("Video not found for HLS request: " + videoId);
-                return ResponseEntity.notFound().build();
-            }
-
-            // PATH RESOLUTION
-            Path videoPath = Path.of(videoManager.getSrc(metadata.get(0)));
-            Path file = videoPath.resolve(filename);
-
-            Resource resource = new UrlResource(file.toUri());
-            if (!resource.exists() || !resource.isReadable()) {
-                if (!resource.exists() || !resource.isReadable()) {
-                    log.warn("HLS file not found: " + file);
-                    return ResponseEntity.notFound().build();
-                }
-            }
-
-            String contentType = "application/octet-stream";
-            if (filename.endsWith(".m3u8")) {
-                contentType = "application/vnd.apple.mpegurl";
-            } else if (filename.endsWith(".ts")) {
-                contentType = "video/mp2t";
-            }
-
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    // Cache segments (ts) for performance, but not playlist (m3u8) as it might verify auth tokens or change
-                    .header("Cache-Control", filename.endsWith(".m3u8") ? "no-cache" : "max-age=3600")
-                    .body(resource);
-
-        } catch (Exception e) {
-            log.error("Failed to serve HLS content", e);
-            return ResponseEntity.internalServerError().build();
+        if (AuthService.getLoggedUserId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        List<Metadata> metadata = videoManager.loadById(videoId);
+
+        Path baseDir = Path.of(videoManager.getSrc(metadata.get(0)));
+
+        String path = request.getRequestURI()
+                .replace("/storage/videos/hls/" + videoId + "/", "");
+
+        Path file = baseDir.resolve(path).normalize();
+
+        if (!file.startsWith(baseDir)) return ResponseEntity.status(403).build();
+
+        if (!Files.exists(file)) return ResponseEntity.notFound().build();
+
+        String ct = file.toString().endsWith(".m3u8") ? "application/vnd.apple.mpegurl" :
+                file.toString().endsWith(".ts")   ? "video/mp2t" : "application/octet-stream";
+
+        return ResponseEntity.ok()
+                .header("Cache-Control", file.toString().endsWith(".ts") ? "max-age=3600" : "no-cache")
+                .contentType(MediaType.parseMediaType(ct))
+                .body(new UrlResource(file.toUri()));
     }
+
 
     @GetMapping("/video/{videoId}")
     public ResponseEntity<ResourceRegion> getVideo(

@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.view.player;
 
+import com.bervan.streamingapp.config.ProductionData;
 import com.vaadin.flow.dom.Element;
 
 import java.util.UUID;
@@ -13,7 +14,7 @@ public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
     private final String VIDEO_PLAYER_ID;
     private final String playerUniqueId;
 
-    public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime) {
+    public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime, ProductionData productionData) {
         this.videoId = videoId;
         this.videoElement = buildVideoElement();
         this.VIDEO_PLAYER_ID = VIDEO_PLAYER_ID;
@@ -52,19 +53,6 @@ public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
         source.setAttribute("src", "/storage/videos/video/" + videoId);
         source.setAttribute("type", "video/mp4");
         video.appendChild(source);
-    }
-
-    private void addSubtitleTrack(Element video, String lang, String label,
-                                  String src, boolean isDefault) {
-        Element track = new Element("track");
-        track.setAttribute("kind", "subtitles");
-        track.setAttribute("src", src);
-        track.setAttribute("srclang", lang);
-        track.setAttribute("label", label);
-        if (isDefault) {
-            track.setAttribute("default", "");
-        }
-        video.appendChild(track);
     }
 
     private void initializeSubtitleShiftFunction() {

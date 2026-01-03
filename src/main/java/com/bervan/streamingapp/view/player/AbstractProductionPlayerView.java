@@ -154,19 +154,21 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + videoId);
     }
 
-    private HLSVideoPlayerComponent createHlsVideoPlayer(WatchDetails watchDetails) {
+    private HLSVideoPlayerComponent createHlsVideoPlayer(WatchDetails watchDetails, ProductionData productionData) {
         return new HLSVideoPlayerComponent(
                 VIDEO_PLAYER_ID_PREFIX,
                 currentVideoFolderId,
-                watchDetails.getCurrentVideoTime()
+                watchDetails.getCurrentVideoTime(),
+                productionData
         );
     }
 
-    private MP4VideoPlayerComponent createMp4VideoPlayer(WatchDetails watchDetails) {
+    private MP4VideoPlayerComponent createMp4VideoPlayer(WatchDetails watchDetails, ProductionData productionData) {
         return new MP4VideoPlayerComponent(
                 VIDEO_PLAYER_ID_PREFIX,
                 currentVideoFolderId,
-                watchDetails.getCurrentVideoTime()
+                watchDetails.getCurrentVideoTime(),
+                productionData
         );
     }
 
@@ -277,9 +279,9 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
         add(new Hr(), new H4("Video: " + video.getFilename()));
         if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.MP4) {
-            videoPlayer = createMp4VideoPlayer(watchDetails);
+            videoPlayer = createMp4VideoPlayer(watchDetails, productionData);
         } else {
-            videoPlayer = createHlsVideoPlayer(watchDetails);
+            videoPlayer = createHlsVideoPlayer(watchDetails, productionData);
         }
 
         add(videoPlayer);
