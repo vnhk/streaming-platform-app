@@ -6,6 +6,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.NumberField;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Component for controlling subtitle delays
@@ -46,21 +47,21 @@ public class SubtitleControlPanel extends VerticalLayout {
         esDelayField.setValue(esDelay);
     }
 
-    public void setEnDelayChangeListener(java.util.function.Consumer<Double> listener) {
+    public void setEnDelayChangeListener(Consumer<Double> listener) {
         enDelayField.addValueChangeListener(e -> {
             double value = Optional.ofNullable(e.getValue()).orElse(0.0);
             listener.accept(value);
         });
     }
 
-    public void setPlDelayChangeListener(java.util.function.Consumer<Double> listener) {
+    public void setPlDelayChangeListener(Consumer<Double> listener) {
         plDelayField.addValueChangeListener(e -> {
             double value = Optional.ofNullable(e.getValue()).orElse(0.0);
             listener.accept(value);
         });
     }
 
-    public void setEsDelayChangeListener(java.util.function.Consumer<Double> listener) {
+    public void setEsDelayChangeListener(Consumer<Double> listener) {
         esDelayField.addValueChangeListener(e -> {
             double value = Optional.ofNullable(e.getValue()).orElse(0.0);
             listener.accept(value);

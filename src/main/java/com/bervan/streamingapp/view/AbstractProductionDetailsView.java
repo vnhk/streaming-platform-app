@@ -5,7 +5,11 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
-import com.bervan.streamingapp.config.structure.mp4.*;
+import com.bervan.streamingapp.config.structure.*;
+import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -188,9 +192,9 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     }
 
     private String findFirstVideoId(ProductionData productionData) {
-        MP4BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
         if (productionStructure instanceof MP4MovieRootProductionStructure) {
-            List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideos();
+            List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideosFolders();
             if (videos != null && !videos.isEmpty()) {
                 return videos.get(0).getId().toString();
             }
@@ -225,30 +229,30 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         Div result = getScrollableLayoutParent();
 
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
-            MP4TvSeriesRootProductionStructure productionStructure = (MP4TvSeriesRootProductionStructure) productionData.getProductionStructure();
-            for (MP4SeasonStructure season : productionStructure.getSeasons()) {
+            TvSeriesBaseRootProductionStructure productionStructure = (TvSeriesBaseRootProductionStructure) productionData.getProductionStructure();
+            for (SeasonStructure season : productionStructure.getSeasons()) {
                 result.add(createModernScrollableSection(season.getMetadataName(),
-                        seasonVideosLayout(season, productionStructure.getPoster())));
+                        seasonVideosLayout(productionData, season)));
             }
         }
 
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.MOVIE) {
-            MP4MovieRootProductionStructure productionStructure = (MP4MovieRootProductionStructure) productionData.getProductionStructure();
+            MovieBaseRootProductionStructure productionStructure = (MovieBaseRootProductionStructure) productionData.getProductionStructure();
             result.add(createModernScrollableSection("Episodes",
-                    createVideosLayout(productionStructure.getVideos(), productionStructure.getPoster())));
+                    createVideosLayout(productionData, productionStructure.getVideosFolders())));
         }
 
 
         return result;
     }
 
-    private HorizontalLayout createVideosLayout(List<Metadata> videos, Metadata defaultPoster) {
+    private HorizontalLayout createVideosLayout(ProductionData productionData, List<Metadata> videos) {
         HorizontalLayout scrollingLayout = getHorizontalScrollingLayout();
 
         int videoCounter = 1;
         for (Metadata video : videos) {
             try {
-                buildTile(defaultPoster, true, null, video, videoCounter, scrollingLayout);
+                buildTile(productionData, null, video, videoCounter, scrollingLayout);
             } catch (Exception e) {
                 log.error("Unable to load video!", e);
                 showErrorNotification("Unable to load video!");
@@ -259,38 +263,32 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         return scrollingLayout;
     }
 
-    private HorizontalLayout seasonVideosLayout(MP4SeasonStructure seasonStructure, Metadata defaultPoster) {
+    private HorizontalLayout seasonVideosLayout(ProductionData productionData, SeasonStructure seasonStructure) {
         int episodes = seasonStructure.getEpisodes().size();
 
-        List<MP4EpisodeStructure> sortedEpisodesFolders = new ArrayList<>();
+        List<EpisodeStructure> sortedEpisodesFolders = new ArrayList<>();
         for (int i = 1; i <= episodes; i++) {
             String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
-            for (MP4EpisodeStructure episodeStructure : seasonStructure.getEpisodes()) {
+            for (EpisodeStructure episodeStructure : seasonStructure.getEpisodes()) {
                 Matcher matcher = regex.matcher(episodeStructure.getMetadataName());
                 if (matcher.find()) {
-                    Metadata video = episodeStructure.getVideo();
-                    if (video != null) {
-                        sortedEpisodesFolders.add(episodeStructure);
-                    } else {
-                        log.error("Episode folder is empty: " + episodeStructure.getMetadataName());
-                    }
+                    sortedEpisodesFolders.add(episodeStructure);
                 }
             }
         }
 
-        return createEpisodesLayout(sortedEpisodesFolders, defaultPoster);
+        return createEpisodesLayout(sortedEpisodesFolders, productionData);
     }
 
 
-    protected HorizontalLayout createEpisodesLayout(List<MP4EpisodeStructure> episodeStructures, Metadata defaultPoster) {
+    protected HorizontalLayout createEpisodesLayout(List<EpisodeStructure> episodeStructures, ProductionData productionData) {
         HorizontalLayout scrollingLayout = getHorizontalScrollingLayout();
 
         int videoCounter = 1;
-        for (MP4EpisodeStructure episodeStructure : episodeStructures) {
+        for (EpisodeStructure episodeStructure : episodeStructures) {
             try {
-                Metadata video = episodeStructure.getVideo();
-                buildTile(defaultPoster, true, episodeStructure.getPoster(), video, videoCounter, scrollingLayout);
+                buildTile(productionData, episodeStructure.getPoster(), episodeStructure.getEpisodeFolder(), videoCounter, scrollingLayout);
             } catch (Exception e) {
                 log.error("Unable to load video!", e);
                 showErrorNotification("Unable to load video!");
@@ -301,31 +299,31 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         return scrollingLayout;
     }
 
-    private void buildTile(Metadata defaultPoster, boolean useEpisodeGeneratedName, Metadata poster, Metadata video, int videoCounter, HorizontalLayout scrollingLayout) {
-        VerticalLayout tile = getModernTile();
+    private void buildTile(ProductionData productionData, Metadata primaryPoster, Metadata videoFolder, int videoCounter, HorizontalLayout scrollingLayout) {
+        VerticalLayout tile = createTile(productionData.getProductionStructure().getPoster(), primaryPoster, videoCounter);
+        tile.addClickListener(click ->
+                UI.getCurrent().navigate("/streaming-platform/video-player/" + productionData.getProductionName() + "/" + videoFolder.getId())
+        );
+        scrollingLayout.add(tile);
+    }
+
+    private VerticalLayout createTile(Metadata defaultPoster, Metadata primaryPoster, int videoCounter) {
         String imageSrc;
-        if (poster == null) {
-            imageSrc = "/storage/videos/poster/" + video.getId();
+        if (primaryPoster == null) {
+            imageSrc = "/storage/videos/poster/direct/" + defaultPoster.getId();
         } else {
-            imageSrc = "/storage/videos/poster/direct/" + poster.getId();
-        }
-        Image image = getModernImage(video.getFilename(), imageSrc, defaultPoster);
-
-        H4 title;
-        if (useEpisodeGeneratedName) {
-            title = getModernTitle("Episode " + videoCounter);
-        } else {
-            title = getModernTitle(video.getFilename());
+            imageSrc = "/storage/videos/poster/direct/" + primaryPoster.getId();
         }
 
+        Image image = getModernImage("no-image", imageSrc);
+
+        VerticalLayout tile = getModernTile();
         // Play overlay
         Div overlay = getProductionOverlay();
 
+        H4 title = getModernTitle("Episode " + videoCounter);
         tile.getStyle().set("position", "relative");
         tile.add(image, overlay, title);
-        tile.addClickListener(click ->
-                UI.getCurrent().navigate("/streaming-platform/video-player/" + video.getId())
-        );
 
         // Hover effect for overlay
         tile.getElement().executeJs(
@@ -338,8 +336,7 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
                         "if (overlay) overlay.style.opacity = '0';" +
                         "});"
         );
-
-        scrollingLayout.add(tile);
+        return tile;
     }
 
     private Div getProductionOverlay() {

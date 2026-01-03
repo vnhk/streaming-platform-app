@@ -1,5 +1,6 @@
 package com.bervan.streamingapp;
 
+import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
@@ -97,7 +98,9 @@ public class VideoController {
             }
 
 
-            Map<String, Metadata> subtitlesByVideoId = videoManager.findMp4SubtitlesByVideoId(videoId, streamingProductionData);
+            Map<String, Metadata> subtitlesByVideoId = null;
+//                    videoManager.findMp4SubtitlesByVideoId(videoId, streamingProductionData);
+            log.error("getSubtitles -> Not supported yet!");
             if (subtitlesByVideoId == null) {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
@@ -136,11 +139,63 @@ public class VideoController {
         throw new RuntimeException(subtitle.getExtension() + " is not supported for subtitles!");
     }
 
+    @GetMapping("/hls/{videoId}/{filename:.+}")
+    public ResponseEntity<Resource> serveHlsContent(
+            @PathVariable String videoId,
+            @PathVariable String filename) {
+        try {
+            // Security check using AuthService
+            if (AuthService.getLoggedUserId() == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            List<Metadata> metadata = videoManager.loadById(videoId);
+            if (metadata.size() != 1) {
+                log.warn("Video not found for HLS request: " + videoId);
+                return ResponseEntity.notFound().build();
+            }
+
+            // PATH RESOLUTION
+            Path videoPath = Path.of(videoManager.getSrc(metadata.get(0)));
+            Path file = videoPath.resolve(filename);
+
+            Resource resource = new UrlResource(file.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                if (!resource.exists() || !resource.isReadable()) {
+                    log.warn("HLS file not found: " + file);
+                    return ResponseEntity.notFound().build();
+                }
+            }
+
+            String contentType = "application/octet-stream";
+            if (filename.endsWith(".m3u8")) {
+                contentType = "application/vnd.apple.mpegurl";
+            } else if (filename.endsWith(".ts")) {
+                contentType = "video/mp2t";
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    // Cache segments (ts) for performance, but not playlist (m3u8) as it might verify auth tokens or change
+                    .header("Cache-Control", filename.endsWith(".m3u8") ? "no-cache" : "max-age=3600")
+                    .body(resource);
+
+        } catch (Exception e) {
+            log.error("Failed to serve HLS content", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     @GetMapping("/video/{videoId}")
     public ResponseEntity<ResourceRegion> getVideo(
             @PathVariable String videoId,
             @RequestHeader(value = "Range", required = false) String httpRangeList
     ) throws IOException {
+        // Security check using AuthService
+        if (AuthService.getLoggedUserId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         List<Metadata> metadata = videoManager.loadById(videoId);
 
         if (metadata.size() != 1) {

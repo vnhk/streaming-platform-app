@@ -1,26 +1,34 @@
 package com.bervan.streamingapp.view.player;
 
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.dom.Element;
+
+import java.util.UUID;
 
 /**
  * Component encapsulating the HTML5 video player with subtitle support
  */
-public class MP4VideoPlayerComponent extends Div {
+public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
     private final Element videoElement;
     private final String videoId;
     private final String VIDEO_PLAYER_ID;
+    private final String playerUniqueId;
 
     public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime) {
         this.videoId = videoId;
         this.videoElement = buildVideoElement();
         this.VIDEO_PLAYER_ID = VIDEO_PLAYER_ID;
+        this.playerUniqueId = VIDEO_PLAYER_ID + "_" + UUID.randomUUID().toString().substring(0, 8);
 
         addClassName("video-container");
         getElement().appendChild(videoElement);
 
         initializeSubtitleShiftFunction();
         setCurrentTime(startTime);
+    }
+
+    @Override
+    public String getPlayerUniqueId() {
+        return playerUniqueId;
     }
 
     private Element buildVideoElement() {
@@ -142,7 +150,8 @@ public class MP4VideoPlayerComponent extends Div {
         );
     }
 
-    public void shiftSubtitles(String language, double delay) {
+    @Override
+    public void shiftSubtitles(String language, Double delay) {
         getElement().executeJs("window.shiftSubtitles($0, $1)", language, delay);
     }
 }

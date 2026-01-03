@@ -5,8 +5,14 @@ import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
-import com.bervan.streamingapp.config.structure.hls.*;
-import com.bervan.streamingapp.config.structure.mp4.*;
+import com.bervan.streamingapp.config.structure.hls.HLSEpisodeStructure;
+import com.bervan.streamingapp.config.structure.hls.HLSMovieRootProductionStructure;
+import com.bervan.streamingapp.config.structure.hls.HLSSeasonStructure;
+import com.bervan.streamingapp.config.structure.hls.HLSTvSeriesRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -94,7 +100,7 @@ public class StreamingConfig {
     }
 
     private void loadHLSProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
-        HLSBaseRootProductionStructure rootProductionStructure;
+        BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new HLSTvSeriesRootProductionStructure();
             Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
@@ -140,7 +146,7 @@ public class StreamingConfig {
     }
 
     private void loadMP4ProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
-        MP4BaseRootProductionStructure rootProductionStructure;
+        BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new MP4TvSeriesRootProductionStructure();
             Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
@@ -178,9 +184,7 @@ public class StreamingConfig {
             ((MP4TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
         } else {
             rootProductionStructure = new MP4MovieRootProductionStructure();
-            List<Metadata> subtitles = productionFolders.get(productionData.getMainFolderPath()).get("SUBTITLES");
-            ((MP4MovieRootProductionStructure) rootProductionStructure).setSubtitles(getSubtitlesMap(subtitles));
-            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideos(productionFolders.get(productionData.getMainFolderPath()).get("VIDEO"));
+            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideosFolders(productionFolders.get(productionData.getMainFolderPath()).get("VIDEO"));
         }
         updateRoot(productionData, productionFolders, rootProductionStructure);
 

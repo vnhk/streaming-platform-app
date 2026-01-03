@@ -1,7 +1,6 @@
 package com.bervan.streamingapp.view;
 
 import com.bervan.common.view.AbstractPageView;
-import com.bervan.filestorage.model.Metadata;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
@@ -137,13 +136,8 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         return title;
     }
 
-    protected Image getModernImage(String altText, String imageSrc, Metadata defaultPoster) {
-        String fallbackImageSrc;
-        if (defaultPoster != null) {
-            fallbackImageSrc = "/storage/videos/poster/direct/" + defaultPoster.getId();
-        } else {
-            fallbackImageSrc = "images/no_video_image.png";
-        }
+    protected Image getModernImage(String altText, String imageSrc) {
+        String fallbackImageSrc = "images/no_video_image.png";
         Image image = new Image(imageSrc, altText);
         image.setWidth("100%");
         image.setHeight("100%"); // Fill entire tile
@@ -237,7 +231,7 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         VerticalLayout tile = getModernTile();
 
         // Create poster image
-        Image poster = getModernImage(title, imageSrc, null);
+        Image poster = getModernImage(title, imageSrc);
 
         // Create rating badge
         Div ratingBadge = createRatingBadge(rating);

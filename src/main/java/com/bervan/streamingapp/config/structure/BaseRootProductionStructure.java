@@ -1,6 +1,7 @@
 package com.bervan.streamingapp.config.structure;
 
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
 import lombok.Data;
 
 import java.util.UUID;
