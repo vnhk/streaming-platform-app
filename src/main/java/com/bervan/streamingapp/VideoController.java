@@ -15,6 +15,7 @@ import org.springframework.http.*;
 import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -103,7 +104,7 @@ public class VideoController {
 
             Metadata videoFolderSingle = videoFolder.get(0);
             MetadataByPathAndType metadataByPathAndType = videoManager.loadVideoDirectoryContent(videoFolderSingle);
-            List<Metadata> subtitles = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename()).get(ProductionFileType.SUBTITLE);
+            List<Metadata> subtitles = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename() + File.separator).get(ProductionFileType.SUBTITLE);
 
 
             Optional<Metadata> subtitle = videoManager.getSubtitle(language, subtitles);
@@ -123,7 +124,7 @@ public class VideoController {
                 }
             }
             return ResponseEntity.notFound().build();
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Error! ", e);
             return ResponseEntity.badRequest().build();
         }
@@ -228,7 +229,7 @@ public class VideoController {
         try {
             Metadata videoFolderSingle = videoFolder.get(0);
             MetadataByPathAndType metadataByPathAndType = videoManager.loadVideoDirectoryContent(videoFolderSingle);
-            List<Metadata> video = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename()).get(ProductionFileType.VIDEO);
+            List<Metadata> video = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename() + File.separator).get(ProductionFileType.VIDEO);
             Path file = Path.of(videoManager.getSrc(video.get(0)));
             FileSystemResource videoResource = new FileSystemResource(file);
 
