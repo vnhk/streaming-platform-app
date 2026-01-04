@@ -16,9 +16,9 @@ public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
 
     public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime, ProductionData productionData) {
         this.videoId = videoId;
-        this.videoElement = buildVideoElement();
         this.VIDEO_PLAYER_ID = VIDEO_PLAYER_ID;
         this.playerUniqueId = VIDEO_PLAYER_ID + "_" + UUID.randomUUID().toString().substring(0, 8);
+        this.videoElement = buildVideoElement();
 
         addClassName("video-container");
         getElement().appendChild(videoElement);
@@ -50,7 +50,7 @@ public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
 
     private void addVideoSource(Element video) {
         Element source = new Element("source");
-        source.setAttribute("src", "/storage/videos/video/" + videoId);
+        source.setAttribute("src", "/storage/videos/video-folder/" + videoId);
         source.setAttribute("type", "video/mp4");
         video.appendChild(source);
     }

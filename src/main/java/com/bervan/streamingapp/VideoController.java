@@ -3,7 +3,9 @@ package com.bervan.streamingapp;
 import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
+import com.bervan.streamingapp.config.MetadataByPathAndType;
 import com.bervan.streamingapp.config.ProductionData;
+import com.bervan.streamingapp.config.structure.ProductionFileType;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -89,28 +91,25 @@ public class VideoController {
         }
     }
 
-    @GetMapping(value = "/subtitles/{videoId}/{language}")
-    public ResponseEntity<Resource> getSubtitles(@PathVariable String videoId, @PathVariable String language) {
+    @GetMapping(value = "/subtitles/{videoFolderId}/{language}")
+    public ResponseEntity<Resource> getSubtitles(@PathVariable String videoFolderId, @PathVariable String language) {
         try {
-            List<Metadata> metadata = videoManager.loadById(videoId);
+            List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
 
-            if (metadata.size() != 1) {
+            if (videoFolder.size() != 1) {
                 log.error("Could not find video file based on provided id!");
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
 
+            Metadata videoFolderSingle = videoFolder.get(0);
+            MetadataByPathAndType metadataByPathAndType = videoManager.loadVideoDirectoryContent(videoFolderSingle);
+            List<Metadata> subtitles = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename()).get(ProductionFileType.SUBTITLE);
 
-            Map<String, Metadata> subtitlesByVideoId = null;
-//                    videoManager.findMp4SubtitlesByVideoId(videoId, streamingProductionData);
-            log.error("getSubtitles -> Not supported yet!");
-            if (subtitlesByVideoId == null) {
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            }
 
-            Metadata subtitle = subtitlesByVideoId.get(language);
-            if (subtitle != null) {
+            Optional<Metadata> subtitle = videoManager.getSubtitle(language, subtitles);
+            if (subtitle.isPresent()) {
 
-                Resource resource = getSubtitleResource(subtitle);
+                Resource resource = getSubtitleResource(subtitle.get());
                 if (resource.exists() && resource.isReadable()) {
                     HttpHeaders headers = new HttpHeaders();
                     headers.setContentType(MediaType.valueOf("text/vtt"));
@@ -141,15 +140,15 @@ public class VideoController {
         throw new RuntimeException(subtitle.getExtension() + " is not supported for subtitles!");
     }
 
-    @GetMapping("/hls/{videoId}/**")
+    @GetMapping("/hls/{videoFolderId}/**")
     public ResponseEntity<Resource> serveHls(HttpServletRequest request,
-                                             @PathVariable String videoId) throws Exception {
+                                             @PathVariable String videoFolderId) throws Exception {
 
         if (AuthService.getLoggedUserId() == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        List<Metadata> metadata = videoManager.loadById(videoId);
+        List<Metadata> metadata = videoManager.loadById(videoFolderId);
         if (metadata.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -157,7 +156,7 @@ public class VideoController {
         Path baseDir = Path.of(videoManager.getSrc(metadata.get(0)));
 
         String fullPath = request.getRequestURI();
-        String prefix = "/storage/videos/hls/" + videoId + "/";
+        String prefix = "/storage/videos/hls/" + videoFolderId + "/";
 
         if (!fullPath.startsWith(prefix)) {
             return ResponseEntity.badRequest().build();
@@ -209,9 +208,9 @@ public class VideoController {
                 .body(new UrlResource(file.toUri()));
     }
 
-    @GetMapping("/video/{videoId}")
+    @GetMapping("/video-folder/{videoFolderId}")
     public ResponseEntity<ResourceRegion> getVideo(
-            @PathVariable String videoId,
+            @PathVariable String videoFolderId,
             @RequestHeader(value = "Range", required = false) String httpRangeList
     ) throws IOException {
         // Security check using AuthService
@@ -219,37 +218,45 @@ public class VideoController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        List<Metadata> metadata = videoManager.loadById(videoId);
+        List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
 
-        if (metadata.size() != 1) {
+        if (videoFolder.size() != 1) {
             log.error("Could not find file based on provided id!");
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 
-        Path file = Path.of(videoManager.getSrc(metadata.get(0)));
-        FileSystemResource videoResource = new FileSystemResource(file);
+        try {
+            Metadata videoFolderSingle = videoFolder.get(0);
+            MetadataByPathAndType metadataByPathAndType = videoManager.loadVideoDirectoryContent(videoFolderSingle);
+            List<Metadata> video = metadataByPathAndType.get(videoFolderSingle.getPath() + videoFolderSingle.getFilename()).get(ProductionFileType.VIDEO);
+            Path file = Path.of(videoManager.getSrc(video.get(0)));
+            FileSystemResource videoResource = new FileSystemResource(file);
 
-        long contentLength = videoResource.contentLength();
-        ResourceRegion region;
-        long rangeLength = 0;
-        long start = 0, end;
+            long contentLength = videoResource.contentLength();
+            ResourceRegion region;
+            long rangeLength = 0;
+            long start = 0, end;
 
-        if (httpRangeList == null) {
-            region = new ResourceRegion(videoResource, 0, contentLength);
-        } else {
-            String[] ranges = httpRangeList.replace("bytes=", "").split("-");
-            start = Long.parseLong(ranges[0]);
-            end = ranges.length > 1 ? Long.parseLong(ranges[1]) : contentLength - 1;
-            rangeLength = Math.min(1_000_000, end - start + 1); // np. 1MB fragment
-            region = new ResourceRegion(videoResource, start, rangeLength);
+            if (httpRangeList == null) {
+                region = new ResourceRegion(videoResource, 0, contentLength);
+            } else {
+                String[] ranges = httpRangeList.replace("bytes=", "").split("-");
+                start = Long.parseLong(ranges[0]);
+                end = ranges.length > 1 ? Long.parseLong(ranges[1]) : contentLength - 1;
+                rangeLength = Math.min(5_000_000, end - start + 1);
+                region = new ResourceRegion(videoResource, start, rangeLength);
+            }
+
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .contentType(MediaTypeFactory
+                            .getMediaType(videoResource)
+                            .orElse(MediaType.APPLICATION_OCTET_STREAM))
+                    .header("Accept-Ranges", "bytes")
+                    .contentLength(rangeLength)
+                    .body(region);
+        } catch (Exception e) {
+            log.error("Error! ", e);
+            return ResponseEntity.badRequest().build();
         }
-
-        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                .contentType(MediaTypeFactory
-                        .getMediaType(videoResource)
-                        .orElse(MediaType.APPLICATION_OCTET_STREAM))
-                .header("Accept-Ranges", "bytes")
-                .contentLength(rangeLength)
-                .body(region);
     }
 }

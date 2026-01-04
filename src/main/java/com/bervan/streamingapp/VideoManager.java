@@ -64,7 +64,7 @@ public class VideoManager {
         this.fileServiceManager = fileServiceManager;
     }
 
-    private static void putIf(String key, Map<String, List<Metadata>> result, Metadata file) {
+    private static void putIf(ProductionFileType key, Map<ProductionFileType, List<Metadata>> result, Metadata file) {
         if (!result.containsKey(key)) {
             result.put(key, new ArrayList<>());
         }
@@ -194,29 +194,29 @@ public class VideoManager {
         SearchResponse<Metadata> response = searchService.search(searchRequest, options);
         List<Metadata> files = response.getResultList();
 
-        Map<String, List<Metadata>> result = new HashMap<>();
+        Map<ProductionFileType, List<Metadata>> result = new HashMap<>();
         for (Metadata file : files) {
             if (file.getFilename().equals("poster.png") || file.getFilename().equals("poster.jpg")) {
-                putIf("POSTER", result, file);
+                putIf(ProductionFileType.POSTER, result, file);
             } else if (file.getFilename().equals("details.json")) {
-                putIf("DETAILS", result, file);
+                putIf(ProductionFileType.DETAILS, result, file);
             } else if (file.getFilename().endsWith("vtt") || file.getFilename().endsWith("srt")) {
-                putIf("SUBTITLES", result, file);
+                putIf(ProductionFileType.SUBTITLE, result, file);
             } else if (supportedExtensions.contains(file.getExtension())) {
-                putIf("VIDEO", result, file);
+                putIf(ProductionFileType.VIDEO, result, file);
             } else if (file.isDirectory()) {
-                putIf("DIRECTORY", result, file);
+                putIf(ProductionFileType.DIRECTORY, result, file);
             }
         }
 
         MetadataByPathAndType metadataByPath = new MetadataByPathAndType();
 
-        for (Map.Entry<String, List<Metadata>> metadataByType : result.entrySet()) {
-            String type = metadataByType.getKey();
+        for (Map.Entry<ProductionFileType, List<Metadata>> metadataByType : result.entrySet()) {
+            ProductionFileType type = metadataByType.getKey();
             for (Metadata metadata : metadataByType.getValue()) {
                 String path = metadata.getPath();
                 metadataByPath.computeIfAbsent(path, k -> new HashMap<>());
-                Map<String, List<Metadata>> typeMap = metadataByPath.get(path);
+                Map<ProductionFileType, List<Metadata>> typeMap = metadataByPath.get(path);
                 if (typeMap == null) {
                     typeMap = new HashMap<>();
                     typeMap.put(type, new ArrayList<>());

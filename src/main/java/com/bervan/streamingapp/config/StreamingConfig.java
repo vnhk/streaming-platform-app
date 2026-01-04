@@ -5,6 +5,7 @@ import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
+import com.bervan.streamingapp.config.structure.ProductionFileType;
 import com.bervan.streamingapp.config.structure.hls.HLSEpisodeStructure;
 import com.bervan.streamingapp.config.structure.hls.HLSMovieRootProductionStructure;
 import com.bervan.streamingapp.config.structure.hls.HLSSeasonStructure;
@@ -59,7 +60,7 @@ public class StreamingConfig {
                 continue;
             }
 
-            List<Metadata> details = productionFolders.get(mainFolderPath).get("DETAILS");
+            List<Metadata> details = productionFolders.get(mainFolderPath).get(ProductionFileType.DETAILS);
             ProductionDetails productionDetails;
             if (details != null && !details.isEmpty()) {
                 Metadata metadata = details.get(0);
@@ -107,21 +108,21 @@ public class StreamingConfig {
         BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new HLSTvSeriesRootProductionStructure();
-            Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
-            List<Metadata> seasonDirectories = seasonsMap.get("DIRECTORY");
+            Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
+            List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
             List<HLSSeasonStructure> seasonStructureList = new ArrayList<>();
             if (seasonDirectories != null && !seasonDirectories.isEmpty()) {
                 for (Metadata seasonDirectory : seasonDirectories) {
                     HLSSeasonStructure seasonStructure = new HLSSeasonStructure();
                     seasonStructure.setSeasonFolder(seasonDirectory);
-                    Map<String, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
-                    List<Metadata> episodeDirectories = seasonsFilesMap.get("DIRECTORY");
+                    Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
+                    List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
                     List<HLSEpisodeStructure> episodeStructureList = new ArrayList<>();
                     for (Metadata episodeDirectory : episodeDirectories) {
                         HLSEpisodeStructure episodeStructure = new HLSEpisodeStructure();
                         episodeStructure.setEpisodeFolder(episodeDirectory);
-                        Map<String, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
-                        List<Metadata> poster = episodeFilesMap.get("POSTER");
+                        Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
+                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
                         if (poster != null && !poster.isEmpty()) {
                             episodeStructure.setPoster(poster.get(0));
                         }
@@ -142,8 +143,8 @@ public class StreamingConfig {
 
     private void updateRoot(ProductionData productionData, MetadataByPathAndType productionFolders, BaseRootProductionStructure rootProductionStructure) {
         rootProductionStructure.setMainFolder(productionData.getMainFolder());
-        rootProductionStructure.setDetails(productionFolders.get(productionData.getMainFolderPath()).get("DETAILS").get(0));
-        List<Metadata> poster = productionFolders.get(productionData.getMainFolderPath()).get("POSTER");
+        rootProductionStructure.setDetails(productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.DETAILS).get(0));
+        List<Metadata> poster = productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.POSTER);
         if (poster != null && !poster.isEmpty()) {
             rootProductionStructure.setPoster(poster.get(0));
         }
@@ -153,31 +154,31 @@ public class StreamingConfig {
         BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new MP4TvSeriesRootProductionStructure();
-            Map<String, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
-            List<Metadata> seasonDirectories = seasonsMap.get("DIRECTORY");
+            Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
+            List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
             List<MP4SeasonStructure> seasonStructureList = new ArrayList<>();
             if (seasonDirectories != null && !seasonDirectories.isEmpty()) {
                 for (Metadata seasonDirectory : seasonDirectories) {
                     MP4SeasonStructure seasonStructure = new MP4SeasonStructure();
                     seasonStructure.setSeasonFolder(seasonDirectory);
-                    Map<String, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
-                    List<Metadata> episodeDirectories = seasonsFilesMap.get("DIRECTORY");
+                    Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
+                    List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
                     List<MP4EpisodeStructure> episodeStructureList = new ArrayList<>();
                     for (Metadata episodeDirectory : episodeDirectories) {
                         MP4EpisodeStructure episodeStructure = new MP4EpisodeStructure();
                         episodeStructure.setEpisodeFolder(episodeDirectory);
-                        Map<String, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
-                        List<Metadata> poster = episodeFilesMap.get("POSTER");
+                        Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
+                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
                         if (poster != null && !poster.isEmpty()) {
                             episodeStructure.setPoster(poster.get(0));
                         }
 
-                        List<Metadata> video = episodeFilesMap.get("VIDEO");
+                        List<Metadata> video = episodeFilesMap.get(ProductionFileType.VIDEO);
                         if (video != null && !video.isEmpty()) {
                             episodeStructure.setVideo(video.get(0));
                         }
 
-                        List<Metadata> subtitles = episodeFilesMap.get("SUBTITLES");
+                        List<Metadata> subtitles = episodeFilesMap.get(ProductionFileType.SUBTITLE);
                         episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
                         episodeStructureList.add(episodeStructure);
                     }
