@@ -225,6 +225,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
                 .map(ProductionData::getProductionDetails)
                 .filter(Objects::nonNull)
                 .map(ProductionDetails::getAudioLang)
+                .flatMap(List::stream)
                 .filter(Objects::nonNull)
                 .filter(audioLang -> !audioLang.isBlank())
                 .collect(Collectors.toSet());
@@ -305,7 +306,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
         if (selectedAudioLang == null) return true;
         ProductionDetails details = data.getProductionDetails();
         return details != null && details.getAudioLang() != null &&
-                details.getAudioLang().equals(selectedAudioLang);
+                details.getAudioLang().contains(selectedAudioLang);
     }
 
 

@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.config;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
@@ -24,7 +25,8 @@ public class ProductionDetails {
     private VideoType type;
 
     @JsonProperty("audioLang")
-    private String audioLang;
+    @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+    private List<String> audioLang;
 
     @JsonProperty("releaseYearStart")
     private Integer releaseYearStart;
