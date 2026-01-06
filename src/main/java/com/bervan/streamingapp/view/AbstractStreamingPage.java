@@ -12,11 +12,15 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import lombok.Getter;
 
 public abstract class AbstractStreamingPage extends AbstractPageView {
+    @Getter
+    StreamingPlatformPageLayout streamingPlatformPageLayout;
 
     public AbstractStreamingPage(String route, String... notVisibleButtonRoutes) {
-        add(new StreamingPlatformPageLayout(route, notVisibleButtonRoutes));
+        streamingPlatformPageLayout = new StreamingPlatformPageLayout(route, notVisibleButtonRoutes);
+        add(streamingPlatformPageLayout);
     }
 
     protected static HorizontalLayout getHorizontalScrollingLayout() {

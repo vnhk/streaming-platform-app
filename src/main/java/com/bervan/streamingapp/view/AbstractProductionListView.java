@@ -7,6 +7,7 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
+import com.bervan.streamingapp.config.StreamingConfigLoader;
 import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -33,6 +34,7 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
     private final Map<String, ProductionData> streamingProductionData;
+    private final StreamingConfigLoader streamingConfigLoader;
 
     // Search and filter components
     private TextField searchField;
@@ -51,11 +53,19 @@ public abstract class AbstractProductionListView extends AbstractRemoteControlSu
     private boolean searchExpanded = false;
     private boolean filtersActive = false;
 
-    public AbstractProductionListView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
+    public AbstractProductionListView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData,
+                                      StreamingConfigLoader streamingConfigLoader) {
         super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         this.videoManager = videoManager;
         this.streamingProductionData = streamingProductionData;
+        this.streamingConfigLoader = streamingConfigLoader;
 
+        streamingPlatformPageLayout.getMenuButtonsRow().add(new BervanButton("Reload Config", e -> {
+            Map<String, ProductionData> newStringProductionDataMap = streamingConfigLoader.getStringProductionDataMap();
+            streamingProductionData.clear();
+            streamingProductionData.putAll(newStringProductionDataMap);
+            showSuccessNotification("Streaming Config Reloaded");
+        }, BervanButtonStyle.SECONDARY));
         initializeView();
     }
 
