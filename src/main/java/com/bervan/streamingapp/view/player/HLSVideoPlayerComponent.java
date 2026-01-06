@@ -226,7 +226,6 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                     console.log('[HLS] hls.audioTracks length:', hls.audioTracks ? hls.audioTracks.length : 'null/undefined');
                     console.log('[HLS] hls.subtitleTracks:', hls.subtitleTracks);
                     console.log('[HLS] hls.levels:', hls.levels);
-                    
                     var audioTracks = [];
                     var subtitleTracks = [];
                     
@@ -461,176 +460,183 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
 
     private void initializeControlsOverlay() {
         String overlayHtml = """
-                <button class="hls-settings-btn" id="%s_settings_btn" title="Settings">⚙</button>
-                <div class="hls-settings-panel" id="%s_settings_panel">
-                    <div class="hls-panel-section">
-                        <div class="hls-panel-header">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                            </svg>
-                            Audio
-                        </div>
-                        <ul class="hls-track-list" id="%s_audio_list">
-                            <li class="hls-no-tracks">Loading...</li>
-                        </ul>
+            <button class="hls-settings-btn" id="%s_settings_btn" title="Settings">⚙</button>
+            <div class="hls-settings-panel" id="%s_settings_panel">
+                <div class="hls-panel-section">
+                    <div class="hls-panel-header">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                        </svg>
+                        Audio
                     </div>
-                    <div class="hls-panel-section">
-                        <div class="hls-panel-header">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6v-2zm0 4h8v2H6v-2zm10 0h2v2h-2v-2zm-6-4h8v2h-8v-2z"/>
-                            </svg>
-                            Subtitles
-                        </div>
-                        <ul class="hls-track-list" id="%s_subtitle_list">
-                            <li class="hls-no-tracks">Loading...</li>
-                        </ul>
-                    </div>
+                    <ul class="hls-track-list" id="%s_audio_list">
+                        <li class="hls-no-tracks">Loading...</li>
+                    </ul>
                 </div>
-                """.formatted(playerUniqueId, playerUniqueId, playerUniqueId, playerUniqueId);
+                <div class="hls-panel-section">
+                    <div class="hls-panel-header">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6v-2zm0 4h8v2H6v-2zm10 0h2v2h-2v-2zm-6-4h8v2h-8v-2z"/>
+                        </svg>
+                        Subtitles
+                    </div>
+                    <ul class="hls-track-list" id="%s_subtitle_list">
+                        <li class="hls-no-tracks">Loading...</li>
+                    </ul>
+                </div>
+            </div>
+            """.formatted(playerUniqueId, playerUniqueId, playerUniqueId, playerUniqueId);
 
         String overlayJs = """
-                (function() {
-                    var playerId = $0;
-                    var overlay = document.getElementById(playerId + '_overlay');
-                    if (!overlay) return;
-                
-                    overlay.innerHTML = $1;
-                
-                    var settingsBtn = document.getElementById(playerId + '_settings_btn');
-                    var settingsPanel = document.getElementById(playerId + '_settings_panel');
-                
-                    if (settingsBtn && settingsPanel) {
-                        settingsBtn.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            settingsPanel.classList.toggle('open');
-                        });
-                
-                        document.addEventListener('click', function(e) {
-                            if (!overlay.contains(e.target)) {
-                                settingsPanel.classList.remove('open');
-                            }
-                        });
-                    }
-                
-                    window.updateTrackUI = function(pid) {
-                        var audioTracks = window['hls_audio_tracks_' + pid] || [];
-                        var subtitleTracks = window['hls_subtitle_tracks_' + pid] || [];
-                        var currentAudio = window['hls_current_audio_' + pid];
-                        var currentSubtitle = window['hls_current_subtitle_' + pid];
-                
-                        var audioList = document.getElementById(pid + '_audio_list');
-                        var subtitleList = document.getElementById(pid + '_subtitle_list');
-                
-                        if (audioList) {
-                            if (audioTracks.length === 0) {
-                                audioList.innerHTML = '<li class="hls-no-tracks">No audio tracks available</li>';
-                            } else {
-                                var audioHtml = '';
-                                for (var i = 0; i < audioTracks.length; i++) {
-                                    var track = audioTracks[i];
-                                    var isActive = track.index === currentAudio;
-                                    var langStr = track.lang !== 'und' ? ' (' + track.lang + ')' : '';
-                                    audioHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
-                                    audioHtml += 'data-track-type="audio" data-track-index="' + track.index + '">';
-                                    audioHtml += track.name + langStr + '</li>';
-                                }
-                                audioList.innerHTML = audioHtml;
-                            }
+            (function() {
+                var playerId = $0;
+                var overlay = document.getElementById(playerId + '_overlay');
+                if (!overlay) return;
+            
+                overlay.innerHTML = $1;
+            
+                var settingsBtn = document.getElementById(playerId + '_settings_btn');
+                var settingsPanel = document.getElementById(playerId + '_settings_panel');
+            
+                if (settingsBtn && settingsPanel) {
+                    settingsBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        settingsPanel.classList.toggle('open');
+                    });
+            
+                    document.addEventListener('click', function(e) {
+                        if (!overlay.contains(e.target)) {
+                            settingsPanel.classList.remove('open');
                         }
-                
-                        if (subtitleList) {
-                            var subtitleHtml = '<li class="hls-track-item' + (currentSubtitle === -1 ? ' active' : '') + '" ';
-                            subtitleHtml += 'data-track-type="subtitle" data-track-index="-1">Off</li>';
-                
-                            for (var i = 0; i < subtitleTracks.length; i++) {
-                                var track = subtitleTracks[i];
-                                var isActive = track.index === currentSubtitle;
+                    });
+                }
+            
+                window.updateTrackUI = function(pid) {
+                    var audioTracks = window['hls_audio_tracks_' + pid] || [];
+                    var subtitleTracks = window['hls_subtitle_tracks_' + pid] || [];
+                    var currentAudio = window['hls_current_audio_' + pid];
+                    var currentSubtitle = window['hls_current_subtitle_' + pid];
+            
+                    var audioList = document.getElementById(pid + '_audio_list');
+                    var subtitleList = document.getElementById(pid + '_subtitle_list');
+            
+                    if (audioList) {
+                        if (audioTracks.length === 0) {
+                            audioList.innerHTML = '<li class="hls-no-tracks">No audio tracks available</li>';
+                        } else {
+                            var audioHtml = '';
+                            for (var i = 0; i < audioTracks.length; i++) {
+                                var track = audioTracks[i];
+                                var isActive = track.index === currentAudio;
                                 var langStr = track.lang !== 'und' ? ' (' + track.lang + ')' : '';
-                                subtitleHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
-                                subtitleHtml += 'data-track-type="subtitle" data-track-index="' + track.index + '">';
-                                subtitleHtml += track.name + langStr + '</li>';
+                                audioHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
+                                audioHtml += 'data-track-type="audio" data-track-index="' + track.index + '">';
+                                audioHtml += track.name + langStr + '</li>';
                             }
-                            subtitleList.innerHTML = subtitleHtml;
+                            audioList.innerHTML = audioHtml;
                         }
-                
-                        var allItems = document.querySelectorAll('#' + pid + '_settings_panel .hls-track-item');
-                        for (var i = 0; i < allItems.length; i++) {
-                            (function(item) {
-                                item.onclick = function() {
-                                    var type = this.getAttribute('data-track-type');
-                                    var index = parseInt(this.getAttribute('data-track-index'));
-                                    var hls = window['hls_instance_' + pid];
-                                    var video = document.getElementById(pid);
-                                    if (hls) {
-                                        if (type === 'audio') {
-                                            hls.audioTrack = index;
-                                        } else if (type === 'subtitle') {
-                                            hls.subtitleTrack = index;
+                    }
+            
+                    if (subtitleList) {
+                        var subtitleHtml = '<li class="hls-track-item' + (currentSubtitle === -1 ? ' active' : '') + '" ';
+                        subtitleHtml += 'data-track-type="subtitle" data-track-index="-1">Off</li>';
+            
+                        for (var i = 0; i < subtitleTracks.length; i++) {
+                            var track = subtitleTracks[i];
+                            var isActive = track.index === currentSubtitle;
+                            var langStr = track.lang !== 'und' ? ' (' + track.lang + ')' : '';
+                            subtitleHtml += '<li class="hls-track-item' + (isActive ? ' active' : '') + '" ';
+                            subtitleHtml += 'data-track-type="subtitle" data-track-index="' + track.index + '">';
+                            subtitleHtml += track.name + langStr + '</li>';
+                        }
+                        subtitleList.innerHTML = subtitleHtml;
+                    }
+            
+                    var allItems = document.querySelectorAll('#' + pid + '_settings_panel .hls-track-item');
+                    for (var i = 0; i < allItems.length; i++) {
+                        (function(item) {
+                            item.onclick = function() {
+                                var type = this.getAttribute('data-track-type');
+                                var index = parseInt(this.getAttribute('data-track-index'));
+                                var hls = window['hls_instance_' + pid];
+                                var video = document.getElementById(pid);
+                                
+                                if (type === 'audio') {
+                                    if (hls) hls.audioTrack = index;
+                                } else if (type === 'subtitle') {
+                                    window['hls_current_subtitle_' + pid] = index;
+                                    
+                                    if (index >= 1000) {
+                                        if (hls) hls.subtitleTrack = -1;
+                                        
+                                        var nativeIndex = index - 1000;
+                                        
+                                        if (video && video.textTracks) {
+                                            for (var j = 0; j < video.textTracks.length; j++) {
+                                                video.textTracks[j].mode = (j === nativeIndex) ? 'showing' : 'hidden';
+                                            }
                                         }
-                                    }
-                                    // Also handle native textTracks if available
-                                    if (video && video.textTracks) {
-                                        console.log("videoTracks:" + video.textTracks);
-                                        for (var i = 0; i < video.textTracks.length; i++) {
-                                            video.textTracks[i].mode = (i === index) ? 'showing' : 'hidden';
-                                        }
-                                        if (index === -1) {
-                                            // Turn off all
-                                            for (var i = 0; i < video.textTracks.length; i++) {
-                                                video.textTracks[i].mode = 'hidden';
+                                    } else {
+                                        if (hls) hls.subtitleTrack = index;
+                                        
+                                        if (index === -1 && video && video.textTracks) {
+                                            for (var j = 0; j < video.textTracks.length; j++) {
+                                                video.textTracks[j].mode = 'hidden';
                                             }
                                         }
                                     }
-                                    window.updateTrackUI(pid);
-                                };
-                            })(allItems[i]);
+                                }
+                                
+                                window.updateTrackUI(pid);
+                            };
+                        })(allItems[i]);
+                    }
+                };
+            
+                window.handleNativeHLSTracks = function(video, componentEl, pid) {
+                    var audioTracks = [];
+                    var subtitleTracks = [];
+            
+                    if (video.audioTracks) {
+                        for (var i = 0; i < video.audioTracks.length; i++) {
+                            var track = video.audioTracks[i];
+                            audioTracks.push({
+                                id: track.id || i,
+                                index: i,
+                                name: track.label || ('Audio ' + (i + 1)),
+                                lang: track.language || 'und',
+                                type: 'audio'
+                            });
                         }
-                    };
-                
-                    window.handleNativeHLSTracks = function(video, componentEl, pid) {
-                        var audioTracks = [];
-                        var subtitleTracks = [];
-                
-                        if (video.audioTracks) {
-                            for (var i = 0; i < video.audioTracks.length; i++) {
-                                var track = video.audioTracks[i];
-                                audioTracks.push({
-                                    id: track.id || i,
-                                    index: i,
-                                    name: track.label || ('Audio ' + (i + 1)),
+                    }
+            
+                    if (video.textTracks) {
+                        for (var i = 0; i < video.textTracks.length; i++) {
+                            var track = video.textTracks[i];
+                            if (track.kind === 'subtitles' || track.kind === 'captions') {
+                                subtitleTracks.push({
+                                    id: 1000 + i,
+                                    index: 1000 + i,
+                                    name: track.label || ('Subtitle ' + (i + 1)),
                                     lang: track.language || 'und',
-                                    type: 'audio'
+                                    type: 'subtitle'
                                 });
                             }
                         }
-                
-                        if (video.textTracks) {
-                            for (var i = 0; i < video.textTracks.length; i++) {
-                                var track = video.textTracks[i];
-                                if (track.kind === 'subtitles' || track.kind === 'captions') {
-                                    subtitleTracks.push({
-                                        id: i,
-                                        index: i,
-                                        name: track.label || ('Subtitle ' + (i + 1)),
-                                        lang: track.language || 'und',
-                                        type: 'subtitle'
-                                    });
-                                }
-                            }
-                        }
-                
-                        window['hls_audio_tracks_' + pid] = audioTracks;
-                        window['hls_subtitle_tracks_' + pid] = subtitleTracks;
-                        window['hls_current_audio_' + pid] = 0;
-                        window['hls_current_subtitle_' + pid] = -1;
-                
-                        componentEl.$server.onAudioTracksLoaded(JSON.stringify(audioTracks));
-                        componentEl.$server.onSubtitleTracksLoaded(JSON.stringify(subtitleTracks));
-                
-                        window.updateTrackUI(pid);
-                    };
-                })();
-                """;
+                    }
+            
+                    window['hls_audio_tracks_' + pid] = audioTracks;
+                    window['hls_subtitle_tracks_' + pid] = subtitleTracks;
+                    window['hls_current_audio_' + pid] = 0;
+                    window['hls_current_subtitle_' + pid] = -1;
+            
+                    componentEl.$server.onAudioTracksLoaded(JSON.stringify(audioTracks));
+                    componentEl.$server.onSubtitleTracksLoaded(JSON.stringify(subtitleTracks));
+            
+                    window.updateTrackUI(pid);
+                };
+            })();
+            """;
 
         getElement().executeJs(overlayJs, playerUniqueId, overlayHtml);
     }
