@@ -189,7 +189,7 @@ public class StreamingConfig {
             ((MP4TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
         } else {
             rootProductionStructure = new MP4MovieRootProductionStructure();
-            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideosFolders(productionFolders.get(productionData.getMainFolderPath()).get("VIDEO"));
+            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideosFolders(productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.VIDEO));
         }
         updateRoot(productionData, productionFolders, rootProductionStructure);
 

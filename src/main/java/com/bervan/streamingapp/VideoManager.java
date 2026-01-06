@@ -190,6 +190,7 @@ public class VideoManager {
 
         SearchQueryOption options = new SearchQueryOption(Metadata.class);
         options.setSortField("filename");
+        options.setPageSize(100000000);
 
         SearchResponse<Metadata> response = searchService.search(searchRequest, options);
         List<Metadata> files = response.getResultList();
