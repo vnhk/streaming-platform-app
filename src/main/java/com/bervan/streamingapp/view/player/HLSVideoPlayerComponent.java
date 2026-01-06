@@ -228,7 +228,6 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                     console.log('[HLS] hls.levels:', hls.levels);
                     var audioTracks = [];
                     var subtitleTracks = [];
-                    
                     // Try to get audio tracks
                     if (hls.audioTracks && hls.audioTracks.length > 0) {
                         console.log('[HLS] Found ' + hls.audioTracks.length + ' audio tracks!');
@@ -515,7 +514,30 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                     var audioTracks = window['hls_audio_tracks_' + pid] || [];
                     var subtitleTracks = window['hls_subtitle_tracks_' + pid] || [];
                     var currentAudio = window['hls_current_audio_' + pid];
+                    
                     var currentSubtitle = window['hls_current_subtitle_' + pid];
+                    
+                    if (currentSubtitle === -1 || currentSubtitle === undefined) {
+                        var video = document.getElementById(pid);
+                        if (video && video.textTracks) {
+                            for (var k = 0; k < video.textTracks.length; k++) {
+                                if (video.textTracks[k].mode === 'showing') {
+                                    var assumedId = 1000 + k;
+                                    
+                                    var found = false;
+                                    for(var t = 0; t < subtitleTracks.length; t++) {
+                                        if (subtitleTracks[t].index === assumedId) {
+                                            currentSubtitle = assumedId;
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    if (found) break;
+                                }
+                            }
+                        }
+                    }
+                    // ---------------------------------------------------------
             
                     var audioList = document.getElementById(pid + '_audio_list');
                     var subtitleList = document.getElementById(pid + '_subtitle_list');
@@ -538,7 +560,9 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                     }
             
                     if (subtitleList) {
-                        var subtitleHtml = '<li class="hls-track-item' + (currentSubtitle === -1 ? ' active' : '') + '" ';
+                        var isOff = (currentSubtitle === -1 || currentSubtitle === undefined);
+                        
+                        var subtitleHtml = '<li class="hls-track-item' + (isOff ? ' active' : '') + '" ';
                         subtitleHtml += 'data-track-type="subtitle" data-track-index="-1">Off</li>';
             
                         for (var i = 0; i < subtitleTracks.length; i++) {
@@ -565,12 +589,11 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                                     if (hls) hls.audioTrack = index;
                                 } else if (type === 'subtitle') {
                                     window['hls_current_subtitle_' + pid] = index;
-                                    
+            
                                     if (index >= 1000) {
                                         if (hls) hls.subtitleTrack = -1;
                                         
                                         var nativeIndex = index - 1000;
-                                        
                                         if (video && video.textTracks) {
                                             for (var j = 0; j < video.textTracks.length; j++) {
                                                 video.textTracks[j].mode = (j === nativeIndex) ? 'showing' : 'hidden';
