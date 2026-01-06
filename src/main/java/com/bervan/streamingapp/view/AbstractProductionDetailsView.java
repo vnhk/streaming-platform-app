@@ -317,27 +317,18 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
             imageSrc = "images/no_video_image.png";
         }
 
-        Image image = getModernImage("no-image", imageSrc);
-
         VerticalLayout tile = getModernTile();
-        // Play overlay
-        Div overlay = getProductionOverlay();
 
-        H4 title = getModernTitle("Episode " + videoCounter);
-        tile.getStyle().set("position", "relative");
-        tile.add(image, overlay, title);
+        // Create poster image
+        String title = "Episode " + videoCounter;
+        Image poster = getModernImage(title, imageSrc);
 
-        // Hover effect for overlay
-        tile.getElement().executeJs(
-                "this.addEventListener('mouseenter', () => {" +
-                        "const overlay = this.querySelector('div');" +
-                        "if (overlay) overlay.style.opacity = '1';" +
-                        "});" +
-                        "this.addEventListener('mouseleave', () => {" +
-                        "const overlay = this.querySelector('div');" +
-                        "if (overlay) overlay.style.opacity = '0';" +
-                        "});"
-        );
+        Div hoverOverlay = createHoverOverlay(title, "");
+
+        // Add all components to tile
+        tile.add(poster);
+        tile.getElement().appendChild(hoverOverlay.getElement());
+
         return tile;
     }
 

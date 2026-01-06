@@ -172,7 +172,7 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
         return ratingBadge;
     }
 
-    protected Div createHoverOverlay(String title, String year) {
+    protected Div createHoverOverlay(String title, String subTitle) {
         Div hoverOverlay = new Div();
         hoverOverlay.addClassName("hover-overlay");
 
@@ -184,7 +184,7 @@ public abstract class AbstractStreamingPage extends AbstractPageView {
                 .set("font-weight", "600")
                 .set("text-shadow", "2px 2px 4px rgba(0, 0, 0, 0.8)");
 
-        Div yearElement = new Div(year);
+        Div yearElement = new Div(subTitle);
         yearElement.getStyle()
                 .set("color", "#ccc")
                 .set("font-size", "0.9rem")
