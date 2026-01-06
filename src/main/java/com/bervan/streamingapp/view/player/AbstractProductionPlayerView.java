@@ -73,7 +73,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
             this.currentVideoFolderId = videoFolderId;
             // Clean up previous components if navigating within same instance
             removeAll();
-            navigationBar.removeAll();
+//            navigationBar.removeAll();
 
             Metadata videoFolder = videoManager.findVideoFolderById(currentVideoFolderId, productionData)
                     .orElseThrow(() -> new IllegalArgumentException("Video not found: " + videoFolderId));

@@ -189,7 +189,7 @@ public class StreamingConfig {
             ((MP4TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
         } else {
             rootProductionStructure = new MP4MovieRootProductionStructure();
-            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideosFolders(productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.VIDEO));
+            ((MP4MovieRootProductionStructure) rootProductionStructure).setVideosFolders(List.of(productionData.getMainFolder()));
         }
         updateRoot(productionData, productionFolders, rootProductionStructure);
 
@@ -211,7 +211,7 @@ public class StreamingConfig {
     }
 
     private void loadMainPosterSrc(MetadataByPathAndType productionFolders, String mainFolderPath, ProductionData productionData) {
-        List<Metadata> mainFolderPoster = productionFolders.get(mainFolderPath).get("POSTER");
+        List<Metadata> mainFolderPoster = productionFolders.get(mainFolderPath).get(ProductionFileType.POSTER);
         if (mainFolderPoster != null && !mainFolderPoster.isEmpty()) {
             try {
                 byte[] file = fileServiceManager.readFile(mainFolderPoster.get(0));
