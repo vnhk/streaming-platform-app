@@ -22,6 +22,7 @@ import com.vaadin.flow.router.RouteParameters;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @JavaScript("https://cdn.jsdelivr.net/npm/hls.js@latest")
 public abstract class AbstractProductionPlayerView extends AbstractRemoteControlSupportedView
@@ -46,12 +47,32 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     // State
     private String currentVideoFolderId;
     private double lastSavedTime = 0;
+    private ShortcutRegistration toggleSubtitlesShortcut;
+    private ShortcutRegistration togglePlayPauseShortcut;
+    private ShortcutRegistration seekForwardShortcut;
+    private ShortcutRegistration seekBackwardShortcut;
+    private ShortcutRegistration toggleFullscreenShortcut;
 
     public AbstractProductionPlayerView(VideoManager videoManager,
                                         Map<String, ProductionData> streamingProductionData) {
         super(ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         this.videoManager = videoManager;
         this.streamingProductionData = streamingProductionData;
+    }
+
+    private void removeKeyboardShortcuts() {
+        if (toggleSubtitlesShortcut != null) toggleSubtitlesShortcut.remove();
+        if (togglePlayPauseShortcut != null) togglePlayPauseShortcut.remove();
+        if (seekForwardShortcut != null) seekForwardShortcut.remove();
+        if (seekBackwardShortcut != null) seekBackwardShortcut.remove();
+        if (toggleFullscreenShortcut != null) toggleFullscreenShortcut.remove();
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        super.onDetach(detachEvent);
+        cleanupResources();
+        removeKeyboardShortcuts();
     }
 
     @Override
@@ -71,16 +92,16 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         try {
             ProductionData productionData = streamingProductionData.get(productionName);
             this.currentVideoFolderId = videoFolderId;
-            // Clean up previous components if navigating within same instance
             removeAll();
 //            navigationBar.removeAll();
 
             Metadata videoFolder = videoManager.findVideoFolderById(currentVideoFolderId, productionData)
                     .orElseThrow(() -> new IllegalArgumentException("Video not found: " + videoFolderId));
 
+            Set<String> availableSubtitles = videoManager.availableSubtitles(videoFolder);
             WatchDetails watchDetails = loadWatchDetails(videoFolderId);
 
-            buildUserInterface(productionData, videoFolder, watchDetails);
+            buildUserInterface(productionData, videoFolder, watchDetails, availableSubtitles);
             setupKeyboardShortcuts();
             startProgressTracking();
 
@@ -154,21 +175,23 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + videoId);
     }
 
-    private HLSVideoPlayerComponent createHlsVideoPlayer(WatchDetails watchDetails, ProductionData productionData) {
+    private HLSVideoPlayerComponent createHlsVideoPlayer(WatchDetails watchDetails, ProductionData productionData, Set<String> availableSubtitles) {
         return new HLSVideoPlayerComponent(
                 VIDEO_PLAYER_ID_PREFIX,
                 currentVideoFolderId,
                 watchDetails.getCurrentVideoTime(),
-                productionData
+                productionData,
+                availableSubtitles
         );
     }
 
-    private MP4VideoPlayerComponent createMp4VideoPlayer(WatchDetails watchDetails, ProductionData productionData) {
+    private MP4VideoPlayerComponent createMp4VideoPlayer(WatchDetails watchDetails, ProductionData productionData, Set<String> availableSubtitles) {
         return new MP4VideoPlayerComponent(
                 VIDEO_PLAYER_ID_PREFIX,
                 currentVideoFolderId,
                 watchDetails.getCurrentVideoTime(),
-                productionData
+                productionData,
+                availableSubtitles
         );
     }
 
@@ -198,11 +221,11 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void setupKeyboardShortcuts() {
-        Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleSubtitles(), Key.KEY_B).listenOn(this);
-        Shortcuts.addShortcutListener(this, () -> videoPlayer.togglePlayPause(), Key.SPACE).listenOn(this);
-        Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(SEEK_STEP_SECONDS), Key.ARROW_RIGHT).listenOn(this);
-        Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(-SEEK_STEP_SECONDS), Key.ARROW_LEFT).listenOn(this);
-        Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleFullscreen(), Key.KEY_F).listenOn(this);
+        toggleSubtitlesShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleSubtitles(), Key.KEY_B).listenOn(this);
+        togglePlayPauseShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.togglePlayPause(), Key.SPACE).listenOn(this);
+        seekForwardShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(SEEK_STEP_SECONDS), Key.ARROW_RIGHT).listenOn(this);
+        seekBackwardShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(-SEEK_STEP_SECONDS), Key.ARROW_LEFT).listenOn(this);
+        toggleFullscreenShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleFullscreen(), Key.KEY_F).listenOn(this);
     }
 
     private void startProgressTracking() {
@@ -247,12 +270,6 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         videoManager.saveSubtitleDelays(watchDetails, enDelay, plDelay);
     }
 
-    @Override
-    protected void onDetach(DetachEvent detachEvent) {
-        super.onDetach(detachEvent);
-        cleanupResources();
-    }
-
     private void cleanupResources() {
         getElement().executeJs(
                 "if (window._progressTracker) {" +
@@ -270,7 +287,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         // Hook
     }
 
-    private void buildUserInterface(ProductionData productionData, Metadata video, WatchDetails watchDetails) {
+    private void buildUserInterface(ProductionData productionData, Metadata video, WatchDetails watchDetails, Set<String> availableSubtitles) {
         configurePage();
 
         add(navigationBar);
@@ -279,9 +296,9 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
         add(new Hr(), new H4("Video: " + video.getFilename()));
         if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.MP4) {
-            videoPlayer = createMp4VideoPlayer(watchDetails, productionData);
+            videoPlayer = createMp4VideoPlayer(watchDetails, productionData, availableSubtitles);
         } else {
-            videoPlayer = createHlsVideoPlayer(watchDetails, productionData);
+            videoPlayer = createHlsVideoPlayer(watchDetails, productionData, availableSubtitles);
         }
 
         add(videoPlayer);

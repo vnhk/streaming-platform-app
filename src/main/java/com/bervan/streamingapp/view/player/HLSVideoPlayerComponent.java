@@ -12,6 +12,7 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -39,7 +40,9 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
     private Consumer<Integer> onSubtitleTrackChanged;
 
     public HLSVideoPlayerComponent(String componentId, String currentVideoFolder,
-                                   double startTime, ProductionData productionData) {
+                                   double startTime, ProductionData productionData,
+                                   Set<String> availableSubtitles) {
+        super(availableSubtitles);
         this.componentId = componentId;
         this.currentVideoFolder = currentVideoFolder;
         this.productionData = productionData;
@@ -557,6 +560,7 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                                     var type = this.getAttribute('data-track-type');
                                     var index = parseInt(this.getAttribute('data-track-index'));
                                     var hls = window['hls_instance_' + pid];
+                                    var video = document.getElementById(pid);
                                     if (hls) {
                                         if (type === 'audio') {
                                             hls.audioTrack = index;
@@ -564,6 +568,20 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                                             hls.subtitleTrack = index;
                                         }
                                     }
+                                    // Also handle native textTracks if available
+                                    if (video && video.textTracks) {
+                                        console.log("videoTracks:" + video.textTracks);
+                                        for (var i = 0; i < video.textTracks.length; i++) {
+                                            video.textTracks[i].mode = (i === index) ? 'showing' : 'hidden';
+                                        }
+                                        if (index === -1) {
+                                            // Turn off all
+                                            for (var i = 0; i < video.textTracks.length; i++) {
+                                                video.textTracks[i].mode = 'hidden';
+                                            }
+                                        }
+                                    }
+                                    window.updateTrackUI(pid);
                                 };
                             })(allItems[i]);
                         }

@@ -2,7 +2,6 @@ package com.bervan.streamingapp.config;
 
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
-import com.bervan.streamingapp.config.structure.mp4.MP4BaseRootProductionStructure;
 import lombok.Data;
 
 @Data

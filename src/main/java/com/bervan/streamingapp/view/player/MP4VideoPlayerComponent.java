@@ -3,6 +3,7 @@ package com.bervan.streamingapp.view.player;
 import com.bervan.streamingapp.config.ProductionData;
 import com.vaadin.flow.dom.Element;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -14,7 +15,8 @@ public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
     private final String VIDEO_PLAYER_ID;
     private final String playerUniqueId;
 
-    public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime, ProductionData productionData) {
+    public MP4VideoPlayerComponent(String VIDEO_PLAYER_ID, String videoId, double startTime, ProductionData productionData, Set<String> availableSubtitles) {
+        super(availableSubtitles);
         this.videoId = videoId;
         this.VIDEO_PLAYER_ID = VIDEO_PLAYER_ID;
         this.playerUniqueId = VIDEO_PLAYER_ID + "_" + UUID.randomUUID().toString().substring(0, 8);

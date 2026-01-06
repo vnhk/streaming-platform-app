@@ -71,6 +71,16 @@ public class VideoManager {
         result.get(key).add(file);
     }
 
+    public Set<String> availableSubtitles(Metadata videoFolder) {
+        List<Metadata> subtitles = loadVideoDirectoryContent(videoFolder).get(videoFolder.getPath() + videoFolder.getFilename() + File.separator).get(ProductionFileType.SUBTITLE);
+        Set<String> availableSubtitles = new HashSet<>();
+        for (String key : subtitlesParts.keySet()) {
+            getSubtitle(key, subtitles).ifPresent(e -> availableSubtitles.add(key));
+        }
+
+        return availableSubtitles;
+    }
+
     public Optional<Metadata> getSubtitle(String language, List<Metadata> subtitles) {
         List<Metadata> subtitlesFound = new ArrayList<>();
 
