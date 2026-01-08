@@ -84,7 +84,7 @@ public class VideoManager {
     public Optional<Metadata> getSubtitle(String language, List<Metadata> subtitles) {
         List<Metadata> subtitlesFound = new ArrayList<>();
 
-        if (subtitlesParts.get(language).isEmpty()) {
+        if (subtitlesParts.get(language) != null && subtitlesParts.get(language).isEmpty()) {
             return Optional.empty();
         }
 
