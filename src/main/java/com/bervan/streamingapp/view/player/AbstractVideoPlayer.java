@@ -1,11 +1,11 @@
 package com.bervan.streamingapp.view.player;
 
-import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.dom.Element;
 
 import java.util.Set;
 
-public abstract class AbstractVideoPlayer extends Div {
+public abstract class AbstractVideoPlayer extends VerticalLayout {
     protected final Set<String> availableSubtitles;
 
     protected AbstractVideoPlayer(Set<String> availableSubtitles) {

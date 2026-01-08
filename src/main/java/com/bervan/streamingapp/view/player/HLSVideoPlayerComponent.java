@@ -7,6 +7,8 @@ import com.google.gson.Gson;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.dom.Element;
 import lombok.Getter;
 import lombok.Setter;
@@ -55,22 +57,27 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
 
         this.videoElement = buildVideoElement();
         this.controlsOverlay = buildControlsOverlay();
-
-        getElement().appendChild(videoElement);
-        getElement().appendChild(controlsOverlay);
-
+        Div div = new Div();
+        div.getElement().appendChild(videoElement);
+        div.getElement().appendChild(controlsOverlay);
         injectStyles();
         initializeSubtitleShiftFunction();
+
+        HorizontalLayout horizontalLayout = new HorizontalLayout();
+        horizontalLayout.setWidth("100%");
+        horizontalLayout.add(
+                getTranscriptionPanel(this, currentVideoFolder),
+                div
+        );
+        add(horizontalLayout);
 
         if (startTime > 0) {
             videoElement.setAttribute("data-start-time", String.valueOf(startTime));
         }
 
-        addTranscriptionPanel(this, currentVideoFolder);
-
     }
 
-    private void addTranscriptionPanel(HLSVideoPlayerComponent player, String videoFolder) {
+    private TranscriptionPanel getTranscriptionPanel(HLSVideoPlayerComponent player, String videoFolder) {
         TranscriptionPanel transcription = new TranscriptionPanel(player.getPlayerUniqueId(), videoFolder);
 
         // Handle seek requests
@@ -90,7 +97,7 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         });
 
         // Add to layout
-        add(transcription);
+        return transcription;
     }
 
     private Element buildVideoElement() {
