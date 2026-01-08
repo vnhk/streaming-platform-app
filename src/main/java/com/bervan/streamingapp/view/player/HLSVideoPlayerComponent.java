@@ -65,6 +65,32 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         if (startTime > 0) {
             videoElement.setAttribute("data-start-time", String.valueOf(startTime));
         }
+
+        addTranscriptionPanel(this, currentVideoFolder);
+
+    }
+
+    private void addTranscriptionPanel(HLSVideoPlayerComponent player, String videoFolder) {
+        TranscriptionPanel transcription = new TranscriptionPanel(player.getPlayerUniqueId(), videoFolder);
+
+        // Handle seek requests
+        transcription.setOnSeekRequest(time -> {
+            player.setCurrentTime(time);
+        });
+
+        // Load tracks when available
+        player.setOnSubtitleTracksLoaded(tracks -> {
+            transcription.setAvailableTracks(tracks);
+
+            // Load actual subtitle content
+            for (HLSVideoPlayerComponent.TrackInfo track : tracks) {
+                String url = "/storage/videos/subtitles/" + videoFolder + "/" + track.getLang();
+                transcription.loadSubtitlesFromUrl(track.getLang(), url);
+            }
+        });
+
+        // Add to layout
+        add(transcription);
     }
 
     private Element buildVideoElement() {

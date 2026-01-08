@@ -189,7 +189,7 @@ public class TranscriptionPanel extends VerticalLayout {
                     flex: 1;
                     font-size: 14px;
                     line-height: 1.5;
-                    color: var(--lumo-body-text-color);
+                    color: white;
                 }
                 
                 .transcription-column::-webkit-scrollbar {

@@ -9,7 +9,6 @@ import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.view.AbstractProductionDetailsView;
 import com.bervan.streamingapp.view.AbstractRemoteControlSupportedView;
-import com.bervan.streamingapp.view.player.transcription.TranscriptionPanel;
 import com.vaadin.flow.component.*;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dependency.JavaScript;
@@ -186,29 +185,6 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         );
     }
 
-    private void addTranscriptionPanel(HLSVideoPlayerComponent player, String videoFolder) {
-        TranscriptionPanel transcription = new TranscriptionPanel(player.getPlayerUniqueId(), videoFolder);
-
-        // Handle seek requests
-        transcription.setOnSeekRequest(time -> {
-            player.setCurrentTime(time);
-        });
-
-        // Load tracks when available
-        player.setOnSubtitleTracksLoaded(tracks -> {
-            transcription.setAvailableTracks(tracks);
-
-            // Load actual subtitle content
-            for (HLSVideoPlayerComponent.TrackInfo track : tracks) {
-                String url = "/storage/videos/subtitles/" + videoFolder + "/" + track.getLang();
-                transcription.loadSubtitlesFromUrl(track.getLang(), url);
-            }
-        });
-
-        // Add to layout
-        add(transcription);
-    }
-
     private MP4VideoPlayerComponent createMp4VideoPlayer(WatchDetails watchDetails, ProductionData productionData, Set<String> availableSubtitles) {
         return new MP4VideoPlayerComponent(
                 VIDEO_PLAYER_ID_PREFIX,
@@ -321,15 +297,13 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         add(new Hr(), new H4("Video: " + video.getFilename()));
         if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.MP4) {
             videoPlayer = createMp4VideoPlayer(watchDetails, productionData, availableSubtitles);
+            add(videoPlayer);
+            SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
+            add(subtitleControls);
         } else {
             videoPlayer = createHlsVideoPlayer(watchDetails, productionData, availableSubtitles);
-            addTranscriptionPanel(((HLSVideoPlayerComponent) videoPlayer), currentVideoFolderId);
+            add(videoPlayer);
         }
-
-        add(videoPlayer);
-
-        SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
-        add(subtitleControls);
 
         addCustomComponents(currentVideoFolderId, video);
     }
