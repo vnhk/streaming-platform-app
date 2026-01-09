@@ -300,7 +300,7 @@ public class VideoManager {
             }
         }
         String vttContent = "WEBVTT\n\n" + content.replace(",", ".");
-        vttContent = vttContent.replaceAll("(?m)^\\d+\\s*\\n", "");
+        vttContent = vttContent.replaceAll("(?m)^\\d+\\s*\\n", "").replaceAll("(?s)<.*?>", "");
 
         return vttContent;
     }
