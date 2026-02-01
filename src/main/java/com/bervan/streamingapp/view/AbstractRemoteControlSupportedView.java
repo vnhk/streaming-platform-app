@@ -1,6 +1,7 @@
 package com.bervan.streamingapp.view;
 
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.DetachEvent;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 public abstract class AbstractRemoteControlSupportedView extends AbstractStreamingPage {
@@ -14,6 +15,21 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
         super.onAttach(attachEvent);
         boolean roleStreaming = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream().anyMatch(e -> e.getAuthority().equals("ROLE_STREAMING"));
         addRemoteControlSupport(roleStreaming);
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        super.onDetach(detachEvent);
+        cleanupRemoteControl();
+    }
+
+    private void cleanupRemoteControl() {
+        getElement().executeJs("""
+            if (window.remoteControl) {
+                window.remoteControl.cleanup();
+                window.remoteControl = null;
+            }
+        """);
     }
 
     protected final void addRemoteControlSupport(boolean isTV) {
@@ -116,9 +132,10 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                         }
                 
                         setupKeyboardControls() {
-                            document.addEventListener('keydown', (event) => {
+                            // Store handler reference for cleanup
+                            this.keydownHandler = (event) => {
                                 if (this.isTV) return; // Only for remote devices
-                
+
                                 switch(event.code) {
                                     case 'Space':
                                         event.preventDefault();
@@ -145,7 +162,25 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                                         this.sendCommand('FULLSCREEN', 'video', null);
                                         break;
                                 }
-                            });
+                            };
+                            document.addEventListener('keydown', this.keydownHandler);
+                        }
+
+                        cleanup() {
+                            // Remove keyboard listener
+                            if (this.keydownHandler) {
+                                document.removeEventListener('keydown', this.keydownHandler);
+                                this.keydownHandler = null;
+                            }
+                            // Close WebSocket
+                            if (this.ws) {
+                                this.ws.onclose = null; // Prevent reconnect
+                                this.ws.close();
+                                this.ws = null;
+                            }
+                            // Remove connection info div
+                            const infoDiv = document.getElementById('remote-connection-info');
+                            if (infoDiv) infoDiv.remove();
                         }
                 
                         handleRemoteCommand(message) {
