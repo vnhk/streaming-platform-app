@@ -61,7 +61,7 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                             const urlParams = new URLSearchParams(window.location.search);
                             let roomId = urlParams.get('roomId') || localStorage.getItem('roomId');
                             if (!roomId || roomId.length > 5) {
-                                roomId = 'room_' + Math.floor(Math.random() * 90000 + 10000);                                localStorage.setItem('roomId', roomId);
+                                roomId = '' + Math.floor(Math.random() * 90000 + 10000);                                localStorage.setItem('roomId', roomId);
                             }
                             return roomId;
                         }
@@ -185,33 +185,32 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                 
                         handleRemoteCommand(message) {
                             const video = document.querySelector('video');
-                            if (!video) return;
-                
+
                             switch(message.action) {
                                 case 'PLAY':
-                                    video.play();
+                                    if (video) video.play();
                                     break;
                                 case 'PAUSE':
-                                    video.pause();
+                                    if (video) video.pause();
                                     break;
                                 case 'TOGGLE_PLAY':
-                                    video.paused ? video.play() : video.pause();
+                                    if (video) video.paused ? video.play() : video.pause();
                                     break;
                                 case 'SEEK':
-                                    if (message.data && message.data.relative) {
+                                    if (video && message.data && message.data.relative) {
                                         video.currentTime += message.data.relative;
                                     }
                                     break;
                                 case 'VOLUME':
-                                    if (message.data && message.data.relative) {
+                                    if (video && message.data && message.data.relative) {
                                         video.volume = Math.max(0, Math.min(1, video.volume + message.data.relative));
                                     }
                                     break;
                                 case 'MAXIMIZE':
-                                    this.toggleVideoMaximize(video);
+                                    if (video) this.toggleVideoMaximize(video);
                                     break;
                                 case 'PIP':
-                                    if (document.pictureInPictureEnabled && !video.disablePictureInPicture) {
+                                    if (video && document.pictureInPictureEnabled && !video.disablePictureInPicture) {
                                         if (document.pictureInPictureElement) {
                                             document.exitPictureInPicture();
                                         } else {
@@ -222,12 +221,161 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                                     }
                                     break;
                                 case 'FULLSCREEN_PROMPT':
-                                    this.showFullscreenPrompt(video);
+                                    if (video) this.showFullscreenPrompt(video);
                                     break;
                                 case 'NAVIGATE':
                                     window.location.href = message.data.url;
                                     break;
+                                case 'GET_TRACKS':
+                                    this.sendTracksToRemote(video, message.data?.trackType);
+                                    break;
+                                case 'SET_AUDIO_TRACK':
+                                    this.setAudioTrack(message.data?.index);
+                                    break;
+                                case 'SET_SUBTITLE_TRACK':
+                                    this.setSubtitleTrack(video, message.data?.index);
+                                    break;
+                                case 'NEXT_EPISODE':
+                                    this.navigateEpisode('next');
+                                    break;
+                                case 'PREV_EPISODE':
+                                    this.navigateEpisode('prev');
+                                    break;
                             }
+                        }
+
+                        sendTracksToRemote(video, trackType) {
+                            const response = {
+                                type: 'TRACKS_RESPONSE',
+                                trackType: trackType,
+                                tracks: []
+                            };
+
+                            // Find player ID from video element
+                            const playerId = video ? video.id : null;
+
+                            if (trackType === 'audio' || !trackType) {
+                                // Try HLS audio tracks first
+                                if (playerId && window['hls_audio_tracks_' + playerId]) {
+                                    response.tracks = window['hls_audio_tracks_' + playerId];
+                                    response.currentIndex = window['hls_current_audio_' + playerId] || 0;
+                                } else if (video && video.audioTracks) {
+                                    // Native audio tracks
+                                    for (let i = 0; i < video.audioTracks.length; i++) {
+                                        const track = video.audioTracks[i];
+                                        response.tracks.push({
+                                            index: i,
+                                            name: track.label || ('Audio ' + (i + 1)),
+                                            lang: track.language || 'und',
+                                            enabled: track.enabled
+                                        });
+                                        if (track.enabled) response.currentIndex = i;
+                                    }
+                                }
+                            }
+
+                            if (trackType === 'subtitles' || !trackType) {
+                                response.trackType = 'subtitles';
+                                response.tracks = [{index: -1, name: 'Off', lang: 'off'}];
+
+                                // Try HLS subtitle tracks first
+                                if (playerId && window['hls_subtitle_tracks_' + playerId]) {
+                                    response.tracks = response.tracks.concat(window['hls_subtitle_tracks_' + playerId]);
+                                    response.currentIndex = window['hls_current_subtitle_' + playerId];
+                                    if (response.currentIndex === undefined) response.currentIndex = -1;
+                                } else if (video && video.textTracks) {
+                                    // Native text tracks
+                                    for (let i = 0; i < video.textTracks.length; i++) {
+                                        const track = video.textTracks[i];
+                                        if (track.kind === 'subtitles' || track.kind === 'captions') {
+                                            response.tracks.push({
+                                                index: i,
+                                                name: track.label || ('Subtitle ' + (i + 1)),
+                                                lang: track.language || 'und'
+                                            });
+                                            if (track.mode === 'showing') response.currentIndex = i;
+                                        }
+                                    }
+                                    if (response.currentIndex === undefined) response.currentIndex = -1;
+                                }
+                            }
+
+                            // Send response back through WebSocket
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                this.ws.send(JSON.stringify(response));
+                            }
+                        }
+
+                        setAudioTrack(index) {
+                            const video = document.querySelector('video');
+                            const playerId = video ? video.id : null;
+
+                            // Try HLS first
+                            if (playerId && window['hls_instance_' + playerId]) {
+                                window['hls_instance_' + playerId].audioTrack = index;
+                            } else if (video && video.audioTracks) {
+                                // Native audio tracks
+                                for (let i = 0; i < video.audioTracks.length; i++) {
+                                    video.audioTracks[i].enabled = (i === index);
+                                }
+                            }
+                        }
+
+                        setSubtitleTrack(video, index) {
+                            const playerId = video ? video.id : null;
+
+                            if (index === -1) {
+                                // Turn off all subtitles
+                                if (playerId && window['hls_instance_' + playerId]) {
+                                    window['hls_instance_' + playerId].subtitleTrack = -1;
+                                }
+                                if (video && video.textTracks) {
+                                    for (let i = 0; i < video.textTracks.length; i++) {
+                                        video.textTracks[i].mode = 'hidden';
+                                    }
+                                }
+                                if (playerId) window['hls_current_subtitle_' + playerId] = -1;
+                            } else if (index >= 1000) {
+                                // Native text track (index offset by 1000)
+                                const nativeIndex = index - 1000;
+                                if (playerId && window['hls_instance_' + playerId]) {
+                                    window['hls_instance_' + playerId].subtitleTrack = -1;
+                                }
+                                if (video && video.textTracks) {
+                                    for (let i = 0; i < video.textTracks.length; i++) {
+                                        video.textTracks[i].mode = (i === nativeIndex) ? 'showing' : 'hidden';
+                                    }
+                                }
+                                if (playerId) window['hls_current_subtitle_' + playerId] = index;
+                            } else {
+                                // HLS subtitle track
+                                if (playerId && window['hls_instance_' + playerId]) {
+                                    window['hls_instance_' + playerId].subtitleTrack = index;
+                                }
+                                if (playerId) window['hls_current_subtitle_' + playerId] = index;
+                            }
+
+                            // Update UI if available
+                            if (typeof window.updateTrackUI === 'function' && playerId) {
+                                window.updateTrackUI(playerId);
+                            }
+                        }
+
+                        navigateEpisode(direction) {
+                            // Find navigation buttons on page
+                            const buttons = document.querySelectorAll('.option-button');
+                            for (const btn of buttons) {
+                                const text = btn.textContent.toLowerCase();
+                                if (direction === 'next' && text.includes('next')) {
+                                    btn.click();
+                                    return;
+                                }
+                                if (direction === 'prev' && text.includes('previous')) {
+                                    btn.click();
+                                    return;
+                                }
+                            }
+                            console.log('No ' + direction + ' episode button found');
                         }
                 
                         toggleVideoMaximize(video) {

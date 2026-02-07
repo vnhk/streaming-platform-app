@@ -1,7 +1,16 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.filestorage.model.Metadata;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
+import com.bervan.streamingapp.config.structure.*;
+import com.bervan.streamingapp.config.structure.hls.HLSEpisodeStructure;
+import com.bervan.streamingapp.config.structure.hls.HLSSeasonStructure;
+import com.bervan.streamingapp.config.structure.hls.HLSTvSeriesRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
+import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
@@ -20,9 +29,12 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public abstract class AbstractRemoteControlView extends AbstractStreamingPage implements BeforeEnterObserver {
@@ -256,8 +268,157 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
 
         displayRow.add(maximizeBtn, pipBtn, fullscreenBtn);
 
-        section.add(playbackRow, volumeRow, displayRow);
+        // Episode Navigation Row
+        HorizontalLayout episodeRow = new HorizontalLayout();
+        episodeRow.addClassName("episode-row");
+        episodeRow.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+        episodeRow.setWidthFull();
+
+        Button prevEpisodeBtn = new Button("Prev Episode", new Icon(VaadinIcon.ARROW_LEFT));
+        prevEpisodeBtn.addClassName("episode-btn");
+        prevEpisodeBtn.addClickListener(e -> sendCommand("PREV_EPISODE", "null"));
+
+        Button nextEpisodeBtn = new Button("Next Episode", new Icon(VaadinIcon.ARROW_RIGHT));
+        nextEpisodeBtn.addClassName("episode-btn");
+        nextEpisodeBtn.setIconAfterText(true);
+        nextEpisodeBtn.addClickListener(e -> sendCommand("NEXT_EPISODE", "null"));
+
+        episodeRow.add(prevEpisodeBtn, nextEpisodeBtn);
+
+        // Audio/Subtitles Row
+        HorizontalLayout mediaRow = new HorizontalLayout();
+        mediaRow.addClassName("media-row");
+        mediaRow.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+        mediaRow.setWidthFull();
+
+        Button audioBtn = new Button("Audio", new Icon(VaadinIcon.HEADPHONES));
+        audioBtn.addClassName("media-btn");
+        audioBtn.addClickListener(e -> openTrackSelectionDialog("audio"));
+
+        Button subtitlesBtn = new Button("Subtitles", new Icon(VaadinIcon.FILE_TEXT));
+        subtitlesBtn.addClassName("media-btn");
+        subtitlesBtn.addClickListener(e -> openTrackSelectionDialog("subtitles"));
+
+        mediaRow.add(audioBtn, subtitlesBtn);
+
+        section.add(playbackRow, volumeRow, displayRow, episodeRow, mediaRow);
         return section;
+    }
+
+    private void openTrackSelectionDialog(String trackType) {
+        Dialog dialog = new Dialog();
+        dialog.addClassName("track-selection-dialog");
+        dialog.setWidth("90vw");
+        dialog.setMaxWidth("400px");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(true);
+        content.setSpacing(true);
+
+        H4 title = new H4(trackType.equals("audio") ? "Select Audio Track" : "Select Subtitles");
+        title.getStyle().set("margin", "0 0 16px 0");
+
+        VerticalLayout trackList = new VerticalLayout();
+        trackList.addClassName("track-list");
+        trackList.setId("track-list-" + trackType);
+        trackList.setPadding(false);
+        trackList.setSpacing(false);
+
+        // Loading indicator
+        Span loading = new Span("Requesting tracks from TV...");
+        loading.addClassName("loading-tracks");
+        loading.getStyle().set("color", "var(--glass-text-secondary)");
+        trackList.add(loading);
+
+        Button closeBtn = new Button("Close", e -> dialog.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        closeBtn.setWidthFull();
+
+        content.add(title, trackList, closeBtn);
+        dialog.add(content);
+        dialog.open();
+
+        // Request tracks from TV and handle response
+        setupTrackResponseHandler(trackType, trackList, dialog);
+    }
+
+    private void setupTrackResponseHandler(String trackType, VerticalLayout trackList, Dialog dialog) {
+        // Set up event listener for tracks response and request tracks
+        String script = """
+            (function() {
+                const trackType = '%s';
+                const trackListId = 'track-list-' + trackType;
+
+                // Listen for tracks response
+                const handleTracksEvent = function(event) {
+                    if (event.detail.trackType === trackType) {
+                        const tracks = event.detail.tracks || [];
+                        const trackListEl = document.getElementById(trackListId);
+                        if (!trackListEl) return;
+
+                        // Clear loading
+                        trackListEl.innerHTML = '';
+
+                        if (tracks.length === 0) {
+                            trackListEl.innerHTML = '<div style="color: var(--glass-text-secondary); padding: 16px;">No ' + trackType + ' tracks available</div>';
+                            return;
+                        }
+
+                        // Add tracks
+                        tracks.forEach(function(track, index) {
+                            const item = document.createElement('div');
+                            item.className = 'track-item' + (track.enabled || track.index === event.detail.currentIndex ? ' active' : '');
+                            item.style.cssText = 'padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; margin-bottom: 4px;';
+
+                            const check = document.createElement('span');
+                            check.className = 'track-check';
+                            check.textContent = (track.enabled || track.index === event.detail.currentIndex) ? '✓' : '';
+                            check.style.width = '20px';
+                            check.style.color = 'var(--glass-primary, var(--lumo-primary-color))';
+
+                            const name = document.createElement('span');
+                            name.className = 'track-name';
+                            name.textContent = track.name + (track.lang && track.lang !== 'und' ? ' (' + track.lang + ')' : '');
+                            name.style.flex = '1';
+
+                            item.appendChild(check);
+                            item.appendChild(name);
+
+                            item.onclick = function() {
+                                const action = trackType === 'audio' ? 'SET_AUDIO_TRACK' : 'SET_SUBTITLE_TRACK';
+                                if (window.remoteControl) {
+                                    window.remoteControl.sendCommand(action, 'video', {index: track.index});
+                                }
+                                // Update UI
+                                document.querySelectorAll('#' + trackListId + ' .track-item').forEach(function(el) {
+                                    el.classList.remove('active');
+                                    el.querySelector('.track-check').textContent = '';
+                                });
+                                item.classList.add('active');
+                                check.textContent = '✓';
+                            };
+
+                            trackListEl.appendChild(item);
+                        });
+                    }
+                };
+
+                window.addEventListener('tracks-received', handleTracksEvent);
+
+                // Request tracks
+                if (window.remoteControl) {
+                    window.remoteControl.sendCommand('GET_TRACKS', 'video', {trackType: trackType});
+                }
+
+                // Cleanup when dialog closes
+                setTimeout(function() {
+                    if (!document.getElementById(trackListId)) {
+                        window.removeEventListener('tracks-received', handleTracksEvent);
+                    }
+                }, 30000);
+            })();
+            """.formatted(trackType);
+        getElement().executeJs(script);
     }
 
     private Button createControlButton(VaadinIcon icon, String className, String label) {
@@ -418,19 +579,226 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
 
         info.add(title, meta);
 
-        // Play button
+        // Play button - behavior depends on production type
         Button playBtn = new Button(new Icon(VaadinIcon.PLAY));
         playBtn.addClassName("prod-play-btn");
         playBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        playBtn.addClickListener(e -> {
-            // Navigate to details page where user can select episode/video
-            String url = AbstractProductionDetailsView.ROUTE_NAME + "/" + prod.getMainFolder().getId();
-            sendNavigate(url);
-        });
+
+        if (details.getType() == ProductionDetails.VideoType.TV_SERIES) {
+            // For series - open episode selection dialog
+            playBtn.setIcon(new Icon(VaadinIcon.FOLDER_OPEN));
+            playBtn.addClickListener(e -> openSeriesNavigationDialog(prod));
+        } else {
+            // For movies - navigate directly to player
+            String firstVideoId = findFirstVideoId(prod);
+            if (firstVideoId != null) {
+                playBtn.addClickListener(e -> {
+                    String url = "/streaming-platform/video-player/" + prod.getProductionName() + "/" + firstVideoId;
+                    sendNavigate(url);
+                });
+            } else {
+                playBtn.setEnabled(false);
+            }
+        }
 
         item.add(info, playBtn);
         item.setFlexGrow(1, info);
 
+        return item;
+    }
+
+    private String findFirstVideoId(ProductionData productionData) {
+        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+        if (productionStructure instanceof MP4MovieRootProductionStructure) {
+            List<Metadata> videos = ((MP4MovieRootProductionStructure) productionStructure).getVideosFolders();
+            if (videos != null && !videos.isEmpty()) {
+                return videos.get(0).getId().toString();
+            }
+        } else if (productionStructure instanceof MovieBaseRootProductionStructure) {
+            List<Metadata> videos = ((MovieBaseRootProductionStructure) productionStructure).getVideosFolders();
+            if (videos != null && !videos.isEmpty()) {
+                return videos.get(0).getId().toString();
+            }
+        }
+        return null;
+    }
+
+    private void openSeriesNavigationDialog(ProductionData prod) {
+        Dialog dialog = new Dialog();
+        dialog.addClassName("series-nav-dialog");
+        dialog.setWidth("95vw");
+        dialog.setMaxWidth("500px");
+        dialog.setHeight("80vh");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+        content.setSizeFull();
+
+        // Header
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        H3 titleLabel = new H3(prod.getProductionDetails().getName());
+        titleLabel.getStyle().set("margin", "0");
+
+        Button closeBtn = new Button(new Icon(VaadinIcon.CLOSE));
+        closeBtn.addClassName("dialog-close-btn");
+        closeBtn.addClickListener(e -> dialog.close());
+
+        header.add(titleLabel, closeBtn);
+
+        // Seasons container
+        VerticalLayout seasonsContainer = new VerticalLayout();
+        seasonsContainer.addClassName("seasons-container");
+        seasonsContainer.setPadding(false);
+        seasonsContainer.setSpacing(false);
+        seasonsContainer.getStyle().set("overflow-y", "auto");
+
+        BaseRootProductionStructure structure = prod.getProductionStructure();
+        if (structure instanceof TvSeriesBaseRootProductionStructure) {
+            List<? extends SeasonStructure> seasons = ((TvSeriesBaseRootProductionStructure) structure).getSeasons();
+            for (SeasonStructure season : seasons) {
+                seasonsContainer.add(createSeasonAccordion(prod, season, dialog));
+            }
+        }
+
+        content.add(header, seasonsContainer);
+        content.setFlexGrow(1, seasonsContainer);
+
+        dialog.add(content);
+        dialog.open();
+    }
+
+    private Component createSeasonAccordion(ProductionData prod, SeasonStructure season, Dialog parentDialog) {
+        VerticalLayout accordion = new VerticalLayout();
+        accordion.addClassName("season-accordion");
+        accordion.setPadding(false);
+        accordion.setSpacing(false);
+
+        // Season header (clickable to expand)
+        HorizontalLayout seasonHeader = new HorizontalLayout();
+        seasonHeader.addClassName("season-header");
+        seasonHeader.setWidthFull();
+        seasonHeader.setAlignItems(FlexComponent.Alignment.CENTER);
+        seasonHeader.setPadding(true);
+        seasonHeader.getStyle()
+                .set("cursor", "pointer")
+                .set("background", "var(--glass-btn-bg, rgba(255,255,255,0.05))")
+                .set("border-radius", "8px")
+                .set("margin-bottom", "4px");
+
+        Icon expandIcon = new Icon(VaadinIcon.CHEVRON_RIGHT);
+        expandIcon.addClassName("expand-icon");
+        expandIcon.setSize("16px");
+
+        Span seasonName = new Span(season.getMetadataName());
+        seasonName.addClassName("season-name");
+        seasonName.getStyle().set("font-weight", "500");
+
+        Span episodeCount = new Span("(" + season.getEpisodes().size() + " episodes)");
+        episodeCount.getStyle()
+                .set("color", "var(--glass-text-secondary, rgba(255,255,255,0.6))")
+                .set("font-size", "0.85rem")
+                .set("margin-left", "8px");
+
+        seasonHeader.add(expandIcon, seasonName, episodeCount);
+
+        // Episodes container (initially hidden)
+        VerticalLayout episodesContainer = new VerticalLayout();
+        episodesContainer.addClassName("episodes-container");
+        episodesContainer.setPadding(false);
+        episodesContainer.setSpacing(false);
+        episodesContainer.setVisible(false);
+        episodesContainer.getStyle()
+                .set("padding-left", "24px")
+                .set("margin-bottom", "8px");
+
+        // Sort episodes by number
+        List<? extends EpisodeStructure> sortedEpisodes = getSortedEpisodes(season);
+        int episodeNum = 1;
+        for (EpisodeStructure episode : sortedEpisodes) {
+            episodesContainer.add(createEpisodeItem(prod, episode, episodeNum, parentDialog));
+            episodeNum++;
+        }
+
+        // Toggle expand/collapse
+        seasonHeader.addClickListener(e -> {
+            boolean isExpanded = episodesContainer.isVisible();
+            episodesContainer.setVisible(!isExpanded);
+            expandIcon.getElement().setAttribute("icon", isExpanded ? "vaadin:chevron-right" : "vaadin:chevron-down");
+        });
+
+        accordion.add(seasonHeader, episodesContainer);
+        return accordion;
+    }
+
+    private List<? extends EpisodeStructure> getSortedEpisodes(SeasonStructure season) {
+        List<EpisodeStructure> sortedEpisodes = new ArrayList<>();
+        List<? extends EpisodeStructure> episodes = season.getEpisodes();
+        int maxEpisodes = episodes.size();
+
+        for (int i = 1; i <= maxEpisodes; i++) {
+            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
+            Pattern regex = Pattern.compile(pattern);
+            for (EpisodeStructure episode : episodes) {
+                Matcher matcher = regex.matcher(episode.getMetadataName());
+                if (matcher.find() && !sortedEpisodes.contains(episode)) {
+                    sortedEpisodes.add(episode);
+                    break;
+                }
+            }
+        }
+
+        // Add any remaining episodes that didn't match the pattern
+        for (EpisodeStructure episode : episodes) {
+            if (!sortedEpisodes.contains(episode)) {
+                sortedEpisodes.add(episode);
+            }
+        }
+
+        return sortedEpisodes;
+    }
+
+    private Component createEpisodeItem(ProductionData prod, EpisodeStructure episode, int episodeNum, Dialog parentDialog) {
+        HorizontalLayout item = new HorizontalLayout();
+        item.addClassName("episode-item");
+        item.setWidthFull();
+        item.setAlignItems(FlexComponent.Alignment.CENTER);
+        item.setPadding(true);
+        item.getStyle()
+                .set("cursor", "pointer")
+                .set("border-radius", "6px")
+                .set("transition", "background 0.2s ease");
+
+        Span episodeNumber = new Span("Ep " + episodeNum);
+        episodeNumber.getStyle()
+                .set("min-width", "50px")
+                .set("color", "var(--glass-primary, var(--lumo-primary-color))");
+
+        Span episodeName = new Span(episode.getMetadataName());
+        episodeName.getStyle().set("flex-grow", "1");
+
+        Button playBtn = new Button(new Icon(VaadinIcon.PLAY));
+        playBtn.addClassName("episode-play-btn");
+        playBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+
+        String videoFolderId = episode.getEpisodeFolder().getId().toString();
+        item.addClickListener(e -> {
+            String url = "/streaming-platform/video-player/" + prod.getProductionName() + "/" + videoFolderId;
+            sendNavigate(url);
+            parentDialog.close();
+        });
+
+        playBtn.addClickListener(e -> {
+            String url = "/streaming-platform/video-player/" + prod.getProductionName() + "/" + videoFolderId;
+            sendNavigate(url);
+            parentDialog.close();
+        });
+
+        item.add(episodeNumber, episodeName, playBtn);
         return item;
     }
 
@@ -484,9 +852,36 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
                             const msg = JSON.parse(event.data);
                             if (msg.type === 'STATUS') {
                                 this.showFeedback(msg.message);
+                            } else if (msg.type === 'TRACKS_RESPONSE') {
+                                this.handleTracksResponse(msg);
+                            } else if (msg.type === 'EPISODE_INFO') {
+                                this.handleEpisodeInfo(msg);
                             }
-                        } catch(e) {}
+                        } catch(e) {
+                            console.error('Error parsing WebSocket message:', e);
+                        }
                     };
+                }
+
+                handleTracksResponse(msg) {
+                    console.log('Received tracks:', msg);
+                    // Dispatch custom event for Vaadin to handle
+                    const event = new CustomEvent('tracks-received', {
+                        detail: {
+                            trackType: msg.trackType,
+                            tracks: msg.tracks || []
+                        }
+                    });
+                    window.dispatchEvent(event);
+                }
+
+                handleEpisodeInfo(msg) {
+                    console.log('Received episode info:', msg);
+                    // Update button states if needed
+                    const event = new CustomEvent('episode-info-received', {
+                        detail: msg
+                    });
+                    window.dispatchEvent(event);
                 }
 
                 updateStatus(connected) {
@@ -776,6 +1171,98 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
                     text-align: center;
                     color: var(--glass-text-secondary, rgba(255,255,255,0.5));
                     padding: 32px;
+                }
+
+                .episode-row {
+                    gap: 12px;
+                    margin-bottom: 16px;
+                    padding: 0 16px;
+                }
+
+                .episode-btn {
+                    flex: 1;
+                    padding: 12px 16px;
+                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                    border-radius: 8px;
+                    color: var(--glass-text-primary, white);
+                    font-size: 0.85rem;
+                }
+
+                .episode-btn:hover {
+                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                }
+
+                .media-row {
+                    gap: 12px;
+                    padding: 0 16px;
+                }
+
+                .media-btn {
+                    flex: 1;
+                    padding: 12px 16px;
+                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                    border-radius: 8px;
+                    color: var(--glass-text-primary, white);
+                    font-size: 0.85rem;
+                }
+
+                .media-btn:hover {
+                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                }
+
+                .seasons-container {
+                    flex: 1;
+                }
+
+                .season-header:hover {
+                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1)) !important;
+                }
+
+                .episode-item:hover {
+                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.08));
+                }
+
+                .episode-play-btn {
+                    opacity: 0.6;
+                }
+
+                .episode-item:hover .episode-play-btn {
+                    opacity: 1;
+                }
+
+                .track-list {
+                    max-height: 300px;
+                    overflow-y: auto;
+                }
+
+                .track-item {
+                    padding: 12px 16px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    transition: background 0.2s ease;
+                }
+
+                .track-item:hover {
+                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                }
+
+                .track-item.active {
+                    background: var(--glass-primary-bg, rgba(99, 102, 241, 0.2));
+                    border: 1px solid var(--glass-primary, var(--lumo-primary-color));
+                }
+
+                .track-item .track-check {
+                    width: 20px;
+                    color: var(--glass-primary, var(--lumo-primary-color));
+                }
+
+                .track-item .track-name {
+                    flex: 1;
                 }
             `;
             document.head.appendChild(style);

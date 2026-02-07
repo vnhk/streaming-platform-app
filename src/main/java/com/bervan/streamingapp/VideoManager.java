@@ -447,4 +447,125 @@ public class VideoManager {
         }
         return Optional.empty();
     }
+
+    /**
+     * Gets the next episode folder, including cross-season navigation.
+     * If current episode is the last in a season, returns the first episode of the next season.
+     */
+    public Optional<Metadata> getNextVideoWithCrossSeasonSupport(String currentVideoFolderId, ProductionData productionData) {
+        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+
+        if (!(productionStructure instanceof TvSeriesBaseRootProductionStructure)) {
+            return Optional.empty();
+        }
+
+        TvSeriesBaseRootProductionStructure tvSeries = (TvSeriesBaseRootProductionStructure) productionStructure;
+        List<? extends SeasonStructure> seasons = tvSeries.getSeasons();
+
+        for (int seasonIndex = 0; seasonIndex < seasons.size(); seasonIndex++) {
+            SeasonStructure season = seasons.get(seasonIndex);
+            List<? extends EpisodeStructure> episodes = getSortedEpisodes(season);
+
+            for (int episodeIndex = 0; episodeIndex < episodes.size(); episodeIndex++) {
+                EpisodeStructure episode = episodes.get(episodeIndex);
+                if (episode.getEpisodeFolder().getId().toString().equals(currentVideoFolderId)) {
+                    // Found current episode, now get next
+                    if (episodeIndex + 1 < episodes.size()) {
+                        // Next episode in same season
+                        return Optional.of(episodes.get(episodeIndex + 1).getEpisodeFolder());
+                    } else if (seasonIndex + 1 < seasons.size()) {
+                        // First episode of next season
+                        List<? extends EpisodeStructure> nextSeasonEpisodes = getSortedEpisodes(seasons.get(seasonIndex + 1));
+                        if (!nextSeasonEpisodes.isEmpty()) {
+                            return Optional.of(nextSeasonEpisodes.get(0).getEpisodeFolder());
+                        }
+                    }
+                    // No next episode available
+                    return Optional.empty();
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Gets the previous episode folder, including cross-season navigation.
+     * If current episode is the first in a season, returns the last episode of the previous season.
+     */
+    public Optional<Metadata> getPrevVideoWithCrossSeasonSupport(String currentVideoFolderId, ProductionData productionData) {
+        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
+
+        if (!(productionStructure instanceof TvSeriesBaseRootProductionStructure)) {
+            return Optional.empty();
+        }
+
+        TvSeriesBaseRootProductionStructure tvSeries = (TvSeriesBaseRootProductionStructure) productionStructure;
+        List<? extends SeasonStructure> seasons = tvSeries.getSeasons();
+
+        for (int seasonIndex = 0; seasonIndex < seasons.size(); seasonIndex++) {
+            SeasonStructure season = seasons.get(seasonIndex);
+            List<? extends EpisodeStructure> episodes = getSortedEpisodes(season);
+
+            for (int episodeIndex = 0; episodeIndex < episodes.size(); episodeIndex++) {
+                EpisodeStructure episode = episodes.get(episodeIndex);
+                if (episode.getEpisodeFolder().getId().toString().equals(currentVideoFolderId)) {
+                    // Found current episode, now get previous
+                    if (episodeIndex > 0) {
+                        // Previous episode in same season
+                        return Optional.of(episodes.get(episodeIndex - 1).getEpisodeFolder());
+                    } else if (seasonIndex > 0) {
+                        // Last episode of previous season
+                        List<? extends EpisodeStructure> prevSeasonEpisodes = getSortedEpisodes(seasons.get(seasonIndex - 1));
+                        if (!prevSeasonEpisodes.isEmpty()) {
+                            return Optional.of(prevSeasonEpisodes.get(prevSeasonEpisodes.size() - 1).getEpisodeFolder());
+                        }
+                    }
+                    // No previous episode available
+                    return Optional.empty();
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Checks if there is a next episode available.
+     */
+    public boolean hasNextEpisode(String currentVideoFolderId, ProductionData productionData) {
+        return getNextVideoWithCrossSeasonSupport(currentVideoFolderId, productionData).isPresent();
+    }
+
+    /**
+     * Checks if there is a previous episode available.
+     */
+    public boolean hasPrevEpisode(String currentVideoFolderId, ProductionData productionData) {
+        return getPrevVideoWithCrossSeasonSupport(currentVideoFolderId, productionData).isPresent();
+    }
+
+    private List<EpisodeStructure> getSortedEpisodes(SeasonStructure season) {
+        List<EpisodeStructure> sortedEpisodes = new ArrayList<>();
+        List<? extends EpisodeStructure> episodes = season.getEpisodes();
+        int maxEpisodes = episodes.size();
+
+        for (int i = 1; i <= maxEpisodes; i++) {
+            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
+            Pattern regex = Pattern.compile(pattern);
+            for (EpisodeStructure episode : episodes) {
+                Matcher matcher = regex.matcher(episode.getMetadataName());
+                if (matcher.find() && !sortedEpisodes.contains(episode)) {
+                    sortedEpisodes.add(episode);
+                    break;
+                }
+            }
+        }
+
+        // Add any remaining episodes that didn't match the pattern
+        for (EpisodeStructure episode : episodes) {
+            if (!sortedEpisodes.contains(episode)) {
+                sortedEpisodes.add(episode);
+            }
+        }
+
+        return sortedEpisodes;
+    }
 }

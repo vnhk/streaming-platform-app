@@ -46,6 +46,8 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
     // State
     private String currentVideoFolderId;
+    private String currentProductionName;
+    private ProductionData currentProductionData;
     private double lastSavedTime = 0;
     private ShortcutRegistration toggleSubtitlesShortcut;
     private ShortcutRegistration togglePlayPauseShortcut;
@@ -92,8 +94,10 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         try {
             ProductionData productionData = streamingProductionData.get(productionName);
             this.currentVideoFolderId = videoFolderId;
+            this.currentProductionName = productionName;
+            this.currentProductionData = productionData;
             removeAll();
-//            navigationBar.removeAll();
+            navigationBar.removeAll();
 
             Metadata videoFolder = videoManager.findVideoFolderById(currentVideoFolderId, productionData)
                     .orElseThrow(() -> new IllegalArgumentException("Video not found: " + videoFolderId));
@@ -139,19 +143,41 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void addPreviousButton(Metadata video) {
-        videoManager.getPrevVideo(video).ifPresent(prevVideo -> {
-            Button prevBtn = createStyledButton("Previous episode");
-            prevBtn.addClickListener(e -> navigateToVideo(prevVideo.getId().toString()));
-            navigationBar.add(prevBtn);
-        });
+        // Use cross-season navigation if production data is available
+        if (currentProductionData != null) {
+            videoManager.getPrevVideoWithCrossSeasonSupport(currentVideoFolderId, currentProductionData)
+                    .ifPresent(prevVideo -> {
+                        Button prevBtn = createStyledButton("Previous episode");
+                        prevBtn.addClickListener(e -> navigateToVideo(prevVideo.getId().toString()));
+                        navigationBar.add(prevBtn);
+                    });
+        } else {
+            // Fallback to old method
+            videoManager.getPrevVideo(video).ifPresent(prevVideo -> {
+                Button prevBtn = createStyledButton("Previous episode");
+                prevBtn.addClickListener(e -> navigateToVideo(prevVideo.getId().toString()));
+                navigationBar.add(prevBtn);
+            });
+        }
     }
 
     private void addNextButton(Metadata video) {
-        videoManager.getNextVideo(video).ifPresent(nextVideo -> {
-            Button nextBtn = createStyledButton("Next episode");
-            nextBtn.addClickListener(e -> navigateToVideo(nextVideo.getId().toString()));
-            navigationBar.add(nextBtn);
-        });
+        // Use cross-season navigation if production data is available
+        if (currentProductionData != null) {
+            videoManager.getNextVideoWithCrossSeasonSupport(currentVideoFolderId, currentProductionData)
+                    .ifPresent(nextVideo -> {
+                        Button nextBtn = createStyledButton("Next episode");
+                        nextBtn.addClickListener(e -> navigateToVideo(nextVideo.getId().toString()));
+                        navigationBar.add(nextBtn);
+                    });
+        } else {
+            // Fallback to old method
+            videoManager.getNextVideo(video).ifPresent(nextVideo -> {
+                Button nextBtn = createStyledButton("Next episode");
+                nextBtn.addClickListener(e -> navigateToVideo(nextVideo.getId().toString()));
+                navigationBar.add(nextBtn);
+            });
+        }
     }
 
     private Button createStyledButton(String text) {
@@ -172,7 +198,8 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
     private void navigateToVideo(String videoId) {
         // Force reload/navigation to ensure player clean-up and init
-        UI.getCurrent().getPage().setLocation("/streaming-platform/video-player/" + videoId);
+        String url = "/streaming-platform/video-player/" + currentProductionName + "/" + videoId;
+        UI.getCurrent().getPage().setLocation(url);
     }
 
     private HLSVideoPlayerComponent createHlsVideoPlayer(WatchDetails watchDetails, ProductionData productionData, Set<String> availableSubtitles) {
