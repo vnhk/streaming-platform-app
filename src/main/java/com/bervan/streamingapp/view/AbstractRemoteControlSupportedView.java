@@ -92,23 +92,88 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                         }
                 
                         displayConnectionInfo() {
+                            // First show activation overlay that must be clicked
+                            this.showActivationOverlay();
+                        }
+
+                        showActivationOverlay() {
+                            const overlay = document.createElement('div');
+                            overlay.id = 'remote-activation-overlay';
+                            overlay.innerHTML = `
+                                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                                            background: rgba(0,0,0,0.9); z-index: 10000;
+                                            display: flex; flex-direction: column;
+                                            justify-content: center; align-items: center;">
+                                    <div style="text-align: center; color: white; padding: 30px;">
+                                        <h2 style="font-size: 2rem; margin-bottom: 1rem;">📱 Remote Control</h2>
+                                        <p style="font-size: 1.2rem; margin-bottom: 0.5rem;">Room ID: <strong style="font-size: 2rem; color: #4CAF50;">${this.roomId}</strong></p>
+                                        <p style="color: #aaa; margin-bottom: 2rem;">Enter this code on your phone to connect</p>
+                                        <button id="enable-remote-btn" style="
+                                            background: linear-gradient(135deg, #4CAF50, #45a049);
+                                            color: white; border: none; padding: 20px 50px;
+                                            font-size: 1.5rem; border-radius: 50px;
+                                            cursor: pointer; box-shadow: 0 4px 15px rgba(76,175,80,0.4);
+                                            transition: transform 0.2s, box-shadow 0.2s;">
+                                            ▶ Click to Enable Playback
+                                        </button>
+                                        <p style="color: #888; margin-top: 1.5rem; font-size: 0.9rem;">
+                                            Browser requires a click before remote play works
+                                        </p>
+                                    </div>
+                                </div>
+                            `;
+                            document.body.appendChild(overlay);
+
+                            const btn = document.getElementById('enable-remote-btn');
+                            btn.onmouseover = () => {
+                                btn.style.transform = 'scale(1.05)';
+                                btn.style.boxShadow = '0 6px 20px rgba(76,175,80,0.6)';
+                            };
+                            btn.onmouseout = () => {
+                                btn.style.transform = 'scale(1)';
+                                btn.style.boxShadow = '0 4px 15px rgba(76,175,80,0.4)';
+                            };
+
+                            btn.onclick = () => {
+                                // Try to play video briefly to enable autoplay permission
+                                const video = document.querySelector('video');
+                                if (video) {
+                                    video.muted = true;
+                                    video.play().then(() => {
+                                        video.pause();
+                                        video.muted = false;
+                                        video.currentTime = video.currentTime; // Reset position
+                                    }).catch(() => {});
+                                }
+
+                                overlay.remove();
+                                this.showConnectionInfo();
+                            };
+                        }
+
+                        showConnectionInfo() {
                             const connectionDiv = document.createElement('div');
                             connectionDiv.id = 'remote-connection-info';
                             connectionDiv.innerHTML = `
-                                <div style="position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.8); 
+                                <div style="position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.8);
                                             color: white; padding: 15px; border-radius: 10px; z-index: 9999;">
-                                    <h4>Remote Control</h4>
-                                    <p>Room ID: ${this.roomId}</p>
-                                    <button onclick="this.parentElement.parentElement.style.display='none'">×</button>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span style="width: 10px; height: 10px; background: #4CAF50; border-radius: 50%;"></span>
+                                        <span>Remote Enabled</span>
+                                    </div>
+                                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Room: ${this.roomId}</p>
+                                    <button onclick="this.parentElement.parentElement.style.display='none'"
+                                            style="position: absolute; top: 5px; right: 10px; background: none;
+                                                   border: none; color: white; cursor: pointer; font-size: 1.2rem;">×</button>
                                 </div>
                             `;
                             document.body.appendChild(connectionDiv);
-                
-                            // Auto-hide after 60 seconds
+
+                            // Auto-hide after 10 seconds
                             setTimeout(() => {
                                 const infoDiv = document.getElementById('remote-connection-info');
                                 if (infoDiv) infoDiv.style.display = 'none';
-                            }, 60000);
+                            }, 10000);
                         }
                 
                         setupMediaSessionAPI() {
@@ -178,7 +243,9 @@ public abstract class AbstractRemoteControlSupportedView extends AbstractStreami
                                 this.ws.close();
                                 this.ws = null;
                             }
-                            // Remove connection info div
+                            // Remove overlays and info divs
+                            const overlay = document.getElementById('remote-activation-overlay');
+                            if (overlay) overlay.remove();
                             const infoDiv = document.getElementById('remote-connection-info');
                             if (infoDiv) infoDiv.remove();
                         }
