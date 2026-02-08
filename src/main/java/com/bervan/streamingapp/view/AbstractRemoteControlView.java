@@ -198,7 +198,12 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
         // Recently Watched (if available)
         Button recentBtn = createNavButton("Recent", VaadinIcon.CLOCK, AbstractProductionListView.ROUTE_NAME + "?tab=recent");
 
-        navButtons.add(homeBtn, searchBtn, recentBtn);
+        // Light Player toggle
+        Button lightPlayerBtn = new Button("Light Player", new Icon(VaadinIcon.FLASH));
+        lightPlayerBtn.addClassName("nav-btn");
+        lightPlayerBtn.addClickListener(e -> openLightPlayerSearchDialog());
+
+        navButtons.add(homeBtn, searchBtn, recentBtn, lightPlayerBtn);
         section.add(sectionTitle, navButtons);
         return section;
     }
@@ -532,6 +537,248 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
 
         dialog.add(content);
         dialog.open();
+    }
+
+    private void openLightPlayerSearchDialog() {
+        Dialog dialog = new Dialog();
+        dialog.addClassName("search-dialog");
+        dialog.setWidth("95vw");
+        dialog.setMaxWidth("500px");
+        dialog.setHeight("80vh");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+        content.setSizeFull();
+
+        TextField searchInput = new TextField();
+        searchInput.setPlaceholder("Search movies, series...");
+        searchInput.setWidthFull();
+        searchInput.setPrefixComponent(new Icon(VaadinIcon.SEARCH));
+        searchInput.setValueChangeMode(ValueChangeMode.LAZY);
+        searchInput.setValueChangeTimeout(300);
+
+        VerticalLayout results = new VerticalLayout();
+        results.setPadding(false);
+        results.setSpacing(false);
+
+        List<ProductionData> allProductions = streamingProductionData.values().stream()
+                .filter(p -> p.getProductionDetails() != null)
+                .sorted(Comparator.comparing(p -> p.getProductionDetails().getName() != null ?
+                        p.getProductionDetails().getName() : ""))
+                .limit(20)
+                .collect(Collectors.toList());
+
+        updateLightPlayerResults(results, allProductions, dialog);
+
+        searchInput.addValueChangeListener(e -> {
+            String query = e.getValue().toLowerCase().trim();
+            List<ProductionData> filtered;
+            if (query.isEmpty()) {
+                filtered = allProductions;
+            } else {
+                filtered = streamingProductionData.values().stream()
+                        .filter(p -> p.getProductionDetails() != null)
+                        .filter(p -> {
+                            ProductionDetails d = p.getProductionDetails();
+                            return (d.getName() != null && d.getName().toLowerCase().contains(query)) ||
+                                    (d.getDescription() != null && d.getDescription().toLowerCase().contains(query));
+                        })
+                        .limit(20)
+                        .collect(Collectors.toList());
+            }
+            updateLightPlayerResults(results, filtered, dialog);
+        });
+
+        Button closeBtn = new Button(new Icon(VaadinIcon.CLOSE));
+        closeBtn.addClassName("dialog-close-btn");
+        closeBtn.addClickListener(e -> dialog.close());
+
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.add(new H3("Light Player"), closeBtn);
+
+        content.add(header, searchInput, results);
+        content.setFlexGrow(1, results);
+        dialog.add(content);
+        dialog.open();
+    }
+
+    private void updateLightPlayerResults(VerticalLayout results, List<ProductionData> productions, Dialog dialog) {
+        results.removeAll();
+        if (productions.isEmpty()) {
+            results.add(new Paragraph("No results found"));
+            return;
+        }
+        for (ProductionData prod : productions) {
+            results.add(createLightPlayerItem(prod, dialog));
+        }
+    }
+
+    private Component createLightPlayerItem(ProductionData prod, Dialog parentDialog) {
+        HorizontalLayout item = new HorizontalLayout();
+        item.addClassName("production-item");
+        item.setWidthFull();
+        item.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        ProductionDetails details = prod.getProductionDetails();
+
+        VerticalLayout info = new VerticalLayout();
+        info.setPadding(false);
+        info.setSpacing(false);
+
+        Span title = new Span(details.getName() != null ? details.getName() : "Unknown");
+        title.addClassName("prod-title");
+
+        Span meta = new Span();
+        meta.addClassName("prod-meta");
+        StringBuilder metaText = new StringBuilder();
+        if (details.getType() != null) metaText.append(details.getType().name());
+        if (details.getReleaseYearStart() != null) {
+            if (metaText.length() > 0) metaText.append(" | ");
+            metaText.append(details.getReleaseYearStart());
+        }
+        meta.setText(metaText.toString());
+        info.add(title, meta);
+
+        Button playBtn = new Button(new Icon(VaadinIcon.PLAY));
+        playBtn.addClassName("prod-play-btn");
+        playBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        if (details.getType() == ProductionDetails.VideoType.TV_SERIES) {
+            playBtn.setIcon(new Icon(VaadinIcon.FOLDER_OPEN));
+            playBtn.addClickListener(e -> openLightPlayerSeriesDialog(prod, parentDialog));
+        } else {
+            String firstVideoId = findFirstVideoId(prod);
+            if (firstVideoId != null) {
+                playBtn.addClickListener(e -> {
+                    sendNavigate("/api/streaming/light-player/page?production=" + prod.getProductionName() + "&video=" + firstVideoId);
+                    parentDialog.close();
+                });
+            } else {
+                playBtn.setEnabled(false);
+            }
+        }
+
+        item.add(info, playBtn);
+        item.setFlexGrow(1, info);
+        return item;
+    }
+
+    private void openLightPlayerSeriesDialog(ProductionData prod, Dialog parentDialog) {
+        Dialog dialog = new Dialog();
+        dialog.setWidth("95vw");
+        dialog.setMaxWidth("500px");
+        dialog.setHeight("80vh");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+        content.setSizeFull();
+
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.add(new H3(prod.getProductionDetails().getName()));
+
+        Button closeBtn = new Button(new Icon(VaadinIcon.CLOSE));
+        closeBtn.addClassName("dialog-close-btn");
+        closeBtn.addClickListener(e -> dialog.close());
+        header.add(closeBtn);
+
+        VerticalLayout seasonsContainer = new VerticalLayout();
+        seasonsContainer.setPadding(false);
+        seasonsContainer.setSpacing(false);
+        seasonsContainer.getStyle().set("overflow-y", "auto");
+
+        BaseRootProductionStructure structure = prod.getProductionStructure();
+        if (structure instanceof TvSeriesBaseRootProductionStructure) {
+            List<? extends SeasonStructure> seasons = ((TvSeriesBaseRootProductionStructure) structure).getSeasons();
+            for (SeasonStructure season : seasons) {
+                seasonsContainer.add(createLightPlayerSeasonAccordion(prod, season, dialog, parentDialog));
+            }
+        }
+
+        content.add(header, seasonsContainer);
+        content.setFlexGrow(1, seasonsContainer);
+        dialog.add(content);
+        dialog.open();
+    }
+
+    private Component createLightPlayerSeasonAccordion(ProductionData prod, SeasonStructure season, Dialog seriesDialog, Dialog parentDialog) {
+        VerticalLayout accordion = new VerticalLayout();
+        accordion.setPadding(false);
+        accordion.setSpacing(false);
+
+        HorizontalLayout seasonHeader = new HorizontalLayout();
+        seasonHeader.setWidthFull();
+        seasonHeader.setAlignItems(FlexComponent.Alignment.CENTER);
+        seasonHeader.setPadding(true);
+        seasonHeader.getStyle()
+                .set("cursor", "pointer")
+                .set("background", "var(--glass-btn-bg, rgba(255,255,255,0.05))")
+                .set("border-radius", "8px")
+                .set("margin-bottom", "4px");
+
+        Icon expandIcon = new Icon(VaadinIcon.CHEVRON_RIGHT);
+        expandIcon.setSize("16px");
+
+        Span seasonName = new Span(season.getMetadataName());
+        seasonName.getStyle().set("font-weight", "500");
+
+        Span episodeCount = new Span("(" + season.getEpisodes().size() + " episodes)");
+        episodeCount.getStyle()
+                .set("color", "var(--glass-text-secondary, rgba(255,255,255,0.6))")
+                .set("font-size", "0.85rem")
+                .set("margin-left", "8px");
+
+        seasonHeader.add(expandIcon, seasonName, episodeCount);
+
+        VerticalLayout episodesContainer = new VerticalLayout();
+        episodesContainer.setPadding(false);
+        episodesContainer.setSpacing(false);
+        episodesContainer.setVisible(false);
+        episodesContainer.getStyle().set("padding-left", "24px").set("margin-bottom", "8px");
+
+        List<? extends EpisodeStructure> sortedEpisodes = getSortedEpisodes(season);
+        int episodeNum = 1;
+        for (EpisodeStructure episode : sortedEpisodes) {
+            String videoFolderId = episode.getEpisodeFolder().getId().toString();
+            HorizontalLayout item = new HorizontalLayout();
+            item.addClassName("episode-item");
+            item.setWidthFull();
+            item.setAlignItems(FlexComponent.Alignment.CENTER);
+            item.setPadding(true);
+            item.getStyle().set("cursor", "pointer").set("border-radius", "6px");
+
+            Span epNum = new Span("Ep " + episodeNum);
+            epNum.getStyle().set("min-width", "50px").set("color", "var(--glass-primary, var(--lumo-primary-color))");
+
+            Span epName = new Span(episode.getMetadataName());
+            epName.getStyle().set("flex-grow", "1");
+
+            item.add(epNum, epName);
+            item.addClickListener(e -> {
+                sendNavigate("/api/streaming/light-player/page?production=" + prod.getProductionName() + "&video=" + videoFolderId);
+                seriesDialog.close();
+                parentDialog.close();
+            });
+
+            episodesContainer.add(item);
+            episodeNum++;
+        }
+
+        seasonHeader.addClickListener(e -> {
+            boolean isExpanded = episodesContainer.isVisible();
+            episodesContainer.setVisible(!isExpanded);
+            expandIcon.getElement().setAttribute("icon", isExpanded ? "vaadin:chevron-right" : "vaadin:chevron-down");
+        });
+
+        accordion.add(seasonHeader, episodesContainer);
+        return accordion;
     }
 
     private void updateSearchResults(VerticalLayout results, List<ProductionData> productions) {
