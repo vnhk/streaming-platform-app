@@ -357,6 +357,10 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         } else {
             videoPlayer = createHlsVideoPlayer(watchDetails, productionData, availableSubtitles);
             add(videoPlayer);
+            if (!availableSubtitles.isEmpty()) {
+                SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
+                add(subtitleControls);
+            }
         }
 
         addCustomComponents(currentVideoFolderId, video);

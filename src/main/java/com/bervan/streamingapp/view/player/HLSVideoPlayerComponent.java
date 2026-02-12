@@ -63,13 +63,19 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
         injectStyles();
         initializeSubtitleShiftFunction();
 
-        div.getStyle().set("flex", "1 1 0");
-        div.getStyle().set("min-width", "0");
+        div.getStyle().set("flex", "1 1 30%");
+        div.getStyle().set("min-width", "30%");
+
+        TranscriptionPanel transcriptionPanel = getTranscriptionPanel(this, currentVideoFolder);
+        transcriptionPanel.getStyle().set("flex", "1 1 0");
+        transcriptionPanel.getStyle().set("max-width", "70%");
+        transcriptionPanel.getStyle().set("min-width", "0");
+        transcriptionPanel.getStyle().set("overflow", "hidden");
 
         HorizontalLayout horizontalLayout = new HorizontalLayout();
         horizontalLayout.setWidth("100%");
         horizontalLayout.add(
-                getTranscriptionPanel(this, currentVideoFolder),
+                transcriptionPanel,
                 div
         );
         add(horizontalLayout);
