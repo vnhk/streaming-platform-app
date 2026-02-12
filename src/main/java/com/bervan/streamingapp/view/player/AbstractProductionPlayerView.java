@@ -49,11 +49,6 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     private String currentProductionName;
     private ProductionData currentProductionData;
     private double lastSavedTime = 0;
-    private ShortcutRegistration toggleSubtitlesShortcut;
-    private ShortcutRegistration togglePlayPauseShortcut;
-    private ShortcutRegistration seekForwardShortcut;
-    private ShortcutRegistration seekBackwardShortcut;
-    private ShortcutRegistration toggleFullscreenShortcut;
 
     public AbstractProductionPlayerView(VideoManager videoManager,
                                         Map<String, ProductionData> streamingProductionData) {
@@ -62,19 +57,10 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         this.streamingProductionData = streamingProductionData;
     }
 
-    private void removeKeyboardShortcuts() {
-        if (toggleSubtitlesShortcut != null) toggleSubtitlesShortcut.remove();
-        if (togglePlayPauseShortcut != null) togglePlayPauseShortcut.remove();
-        if (seekForwardShortcut != null) seekForwardShortcut.remove();
-        if (seekBackwardShortcut != null) seekBackwardShortcut.remove();
-        if (toggleFullscreenShortcut != null) toggleFullscreenShortcut.remove();
-    }
-
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         super.onDetach(detachEvent);
         cleanupResources();
-        removeKeyboardShortcuts();
     }
 
     @Override
@@ -248,11 +234,48 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void setupKeyboardShortcuts() {
-        toggleSubtitlesShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleSubtitles(), Key.KEY_B).listenOn(this);
-        togglePlayPauseShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.togglePlayPause(), Key.SPACE).listenOn(this);
-        seekForwardShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(SEEK_STEP_SECONDS), Key.ARROW_RIGHT).listenOn(this);
-        seekBackwardShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.seek(-SEEK_STEP_SECONDS), Key.ARROW_LEFT).listenOn(this);
-        toggleFullscreenShortcut = Shortcuts.addShortcutListener(this, () -> videoPlayer.toggleFullscreen(), Key.KEY_F).listenOn(this);
+        String domId = videoPlayer.getPlayerUniqueId();
+        getElement().executeJs(
+                "var vid = $0;" +
+                "var seekStep = $1;" +
+                "if(window._playerKeyHandler) { document.removeEventListener('keydown', window._playerKeyHandler); }" +
+                "window._playerKeyHandler = function(e) {" +
+                "  var video = document.getElementById(vid);" +
+                "  if(!video) return;" +
+                "  var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';" +
+                "  if(tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;" +
+                "  switch(e.code) {" +
+                "    case 'Space':" +
+                "      e.preventDefault(); e.stopPropagation();" +
+                "      video.paused ? video.play() : video.pause();" +
+                "      break;" +
+                "    case 'ArrowRight':" +
+                "      e.preventDefault(); e.stopPropagation();" +
+                "      video.currentTime += seekStep;" +
+                "      break;" +
+                "    case 'ArrowLeft':" +
+                "      e.preventDefault(); e.stopPropagation();" +
+                "      video.currentTime -= seekStep;" +
+                "      break;" +
+                "    case 'KeyB':" +
+                "      e.preventDefault();" +
+                "      if(video.textTracks.length >= 1) {" +
+                "        var showing = false;" +
+                "        for(var i=0; i<video.textTracks.length; i++) { if(video.textTracks[i].mode==='showing') { showing=true; break; } }" +
+                "        for(var i=0; i<video.textTracks.length; i++) { video.textTracks[i].mode = showing ? 'hidden' : (i===0 ? 'showing' : 'hidden'); }" +
+                "      }" +
+                "      break;" +
+                "    case 'KeyF':" +
+                "      e.preventDefault();" +
+                "      if(document.fullscreenElement===video) { document.exitFullscreen(); }" +
+                "      else if(video.requestFullscreen) { video.requestFullscreen(); }" +
+                "      else if(video.webkitRequestFullscreen) { video.webkitRequestFullscreen(); }" +
+                "      break;" +
+                "  }" +
+                "};" +
+                "document.addEventListener('keydown', window._playerKeyHandler, true);",
+                domId, SEEK_STEP_SECONDS
+        );
     }
 
     private void startProgressTracking() {
@@ -302,6 +325,10 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
                 "if (window._progressTracker) {" +
                         "  clearInterval(window._progressTracker);" +
                         "  window._progressTracker = null;" +
+                        "}" +
+                        "if (window._playerKeyHandler) {" +
+                        "  document.removeEventListener('keydown', window._playerKeyHandler, true);" +
+                        "  window._playerKeyHandler = null;" +
                         "}"
         );
     }

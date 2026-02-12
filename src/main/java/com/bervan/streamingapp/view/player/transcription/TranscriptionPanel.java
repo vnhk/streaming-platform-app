@@ -579,6 +579,16 @@ public class TranscriptionPanel extends VerticalLayout {
                 .filter(c -> c != toggleButton)
                 .forEach(c -> c.setVisible(isVisible));
         toggleButton.setText(isVisible ? "Hide Transcription" : "Show Transcription");
+
+        if (isVisible) {
+            getStyle().remove("flex");
+            getStyle().remove("min-width");
+            getStyle().remove("max-width");
+        } else {
+            getStyle().set("flex", "0 0 auto");
+            getStyle().set("min-width", "160px");
+            getStyle().set("max-width", "160px");
+        }
     }
 
     // Helper class for track options
