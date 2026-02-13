@@ -1,16 +1,12 @@
 package com.bervan.streamingapp.view;
 
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.config.structure.*;
-import com.bervan.streamingapp.config.structure.hls.HLSEpisodeStructure;
-import com.bervan.streamingapp.config.structure.hls.HLSSeasonStructure;
-import com.bervan.streamingapp.config.structure.hls.HLSTvSeriesRootProductionStructure;
-import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
-import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
-import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
+import com.bervan.streamingapp.tv.TvPairingAdapter;
 import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
@@ -39,11 +35,11 @@ import java.util.stream.Collectors;
 
 public abstract class AbstractRemoteControlView extends AbstractStreamingPage implements BeforeEnterObserver {
     public static final String ROUTE_NAME = "/streaming-platform/remote-control";
-
+    private final JsonLogger logger = JsonLogger.getLogger(AbstractRemoteControlView.class, "streaming");
+    private final Map<String, ProductionData> streamingProductionData;
     private String roomId;
     private Div connectionStatus;
     private Span connectionText;
-    private final Map<String, ProductionData> streamingProductionData;
 
     public AbstractRemoteControlView(Map<String, ProductionData> streamingProductionData) {
         super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
@@ -70,14 +66,14 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
     protected void onDetach(DetachEvent detachEvent) {
         super.onDetach(detachEvent);
         getElement().executeJs("""
-            if (window.remoteControl) {
-                if (window.remoteControl.ws) {
-                    window.remoteControl.ws.onclose = null;
-                    window.remoteControl.ws.close();
-                }
-                window.remoteControl = null;
-            }
-        """);
+                    if (window.remoteControl) {
+                        if (window.remoteControl.ws) {
+                            window.remoteControl.ws.onclose = null;
+                            window.remoteControl.ws.close();
+                        }
+                        window.remoteControl = null;
+                    }
+                """);
     }
 
     private void createUI() {
@@ -160,11 +156,16 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
         connectBtn.setWidthFull();
         connectBtn.addClickListener(e -> {
             String inputRoom = roomInput.getValue();
-            if (inputRoom != null && !inputRoom.trim().isEmpty()) {
-                roomId = inputRoom.trim();
-                connectionText.setText("Room: " + roomId);
-                addRemoteControlScript();
-                section.setVisible(false);
+            try {
+                TvPairingAdapter.connect(inputRoom);
+                if (inputRoom != null && !inputRoom.trim().isEmpty()) {
+                    roomId = inputRoom.trim();
+                    connectionText.setText("Room: " + roomId);
+                    addRemoteControlScript();
+                    section.setVisible(false);
+                }
+            } catch (Exception ex) {
+                logger.error("Error connecting to room", ex);
             }
         });
 
@@ -350,79 +351,79 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
     private void setupTrackResponseHandler(String trackType, VerticalLayout trackList, Dialog dialog) {
         // Set up event listener for tracks response and request tracks
         String script = """
-            (function() {
-                const trackType = '%s';
-                const trackListId = 'track-list-' + trackType;
-
-                // Listen for tracks response
-                const handleTracksEvent = function(event) {
-                    if (event.detail.trackType === trackType) {
-                        const tracks = event.detail.tracks || [];
-                        const trackListEl = document.getElementById(trackListId);
-                        if (!trackListEl) return;
-
-                        // Clear loading
-                        trackListEl.innerHTML = '';
-
-                        if (tracks.length === 0) {
-                            trackListEl.innerHTML = '<div style="color: var(--glass-text-secondary); padding: 16px;">No ' + trackType + ' tracks available</div>';
-                            return;
+                (function() {
+                    const trackType = '%s';
+                    const trackListId = 'track-list-' + trackType;
+                
+                    // Listen for tracks response
+                    const handleTracksEvent = function(event) {
+                        if (event.detail.trackType === trackType) {
+                            const tracks = event.detail.tracks || [];
+                            const trackListEl = document.getElementById(trackListId);
+                            if (!trackListEl) return;
+                
+                            // Clear loading
+                            trackListEl.innerHTML = '';
+                
+                            if (tracks.length === 0) {
+                                trackListEl.innerHTML = '<div style="color: var(--glass-text-secondary); padding: 16px;">No ' + trackType + ' tracks available</div>';
+                                return;
+                            }
+                
+                            // Add tracks
+                            tracks.forEach(function(track, index) {
+                                const item = document.createElement('div');
+                                item.className = 'track-item' + (track.enabled || track.index === event.detail.currentIndex ? ' active' : '');
+                                item.style.cssText = 'padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; margin-bottom: 4px;';
+                
+                                const check = document.createElement('span');
+                                check.className = 'track-check';
+                                check.textContent = (track.enabled || track.index === event.detail.currentIndex) ? '✓' : '';
+                                check.style.width = '20px';
+                                check.style.color = 'var(--glass-primary, var(--lumo-primary-color))';
+                
+                                const name = document.createElement('span');
+                                name.className = 'track-name';
+                                name.textContent = track.name + (track.lang && track.lang !== 'und' ? ' (' + track.lang + ')' : '');
+                                name.style.flex = '1';
+                
+                                item.appendChild(check);
+                                item.appendChild(name);
+                
+                                item.onclick = function() {
+                                    const action = trackType === 'audio' ? 'SET_AUDIO_TRACK' : 'SET_SUBTITLE_TRACK';
+                                    if (window.remoteControl) {
+                                        window.remoteControl.sendCommand(action, 'video', {index: track.index});
+                                    }
+                                    // Update UI
+                                    document.querySelectorAll('#' + trackListId + ' .track-item').forEach(function(el) {
+                                        el.classList.remove('active');
+                                        el.querySelector('.track-check').textContent = '';
+                                    });
+                                    item.classList.add('active');
+                                    check.textContent = '✓';
+                                };
+                
+                                trackListEl.appendChild(item);
+                            });
                         }
-
-                        // Add tracks
-                        tracks.forEach(function(track, index) {
-                            const item = document.createElement('div');
-                            item.className = 'track-item' + (track.enabled || track.index === event.detail.currentIndex ? ' active' : '');
-                            item.style.cssText = 'padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; margin-bottom: 4px;';
-
-                            const check = document.createElement('span');
-                            check.className = 'track-check';
-                            check.textContent = (track.enabled || track.index === event.detail.currentIndex) ? '✓' : '';
-                            check.style.width = '20px';
-                            check.style.color = 'var(--glass-primary, var(--lumo-primary-color))';
-
-                            const name = document.createElement('span');
-                            name.className = 'track-name';
-                            name.textContent = track.name + (track.lang && track.lang !== 'und' ? ' (' + track.lang + ')' : '');
-                            name.style.flex = '1';
-
-                            item.appendChild(check);
-                            item.appendChild(name);
-
-                            item.onclick = function() {
-                                const action = trackType === 'audio' ? 'SET_AUDIO_TRACK' : 'SET_SUBTITLE_TRACK';
-                                if (window.remoteControl) {
-                                    window.remoteControl.sendCommand(action, 'video', {index: track.index});
-                                }
-                                // Update UI
-                                document.querySelectorAll('#' + trackListId + ' .track-item').forEach(function(el) {
-                                    el.classList.remove('active');
-                                    el.querySelector('.track-check').textContent = '';
-                                });
-                                item.classList.add('active');
-                                check.textContent = '✓';
-                            };
-
-                            trackListEl.appendChild(item);
-                        });
+                    };
+                
+                    window.addEventListener('tracks-received', handleTracksEvent);
+                
+                    // Request tracks
+                    if (window.remoteControl) {
+                        window.remoteControl.sendCommand('GET_TRACKS', 'video', {trackType: trackType});
                     }
-                };
-
-                window.addEventListener('tracks-received', handleTracksEvent);
-
-                // Request tracks
-                if (window.remoteControl) {
-                    window.remoteControl.sendCommand('GET_TRACKS', 'video', {trackType: trackType});
-                }
-
-                // Cleanup when dialog closes
-                setTimeout(function() {
-                    if (!document.getElementById(trackListId)) {
-                        window.removeEventListener('tracks-received', handleTracksEvent);
-                    }
-                }, 30000);
-            })();
-            """.formatted(trackType);
+                
+                    // Cleanup when dialog closes
+                    setTimeout(function() {
+                        if (!document.getElementById(trackListId)) {
+                            window.removeEventListener('tracks-received', handleTracksEvent);
+                        }
+                    }, 30000);
+                })();
+                """.formatted(trackType);
         getElement().executeJs(script);
     }
 
@@ -1061,458 +1062,458 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
 
     private void addRemoteControlScript() {
         getElement().executeJs("""
-            if (window.remoteControl) {
-                window.remoteControl.ws.onclose = null;
-                window.remoteControl.ws.close();
-            }
-
-            class MobileRemoteControl {
-                constructor(roomId) {
-                    this.roomId = roomId;
-                    this.connect();
-                }
-
-                connect() {
-                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${protocol}//${window.location.host}/ws/remote-control?deviceType=REMOTE&roomId=${this.roomId}`;
-
-                    this.ws = new WebSocket(wsUrl);
-
-                    this.ws.onopen = () => {
-                        console.log('Remote connected to room:', this.roomId);
-                        this.updateStatus(true);
-                    };
-
-                    this.ws.onclose = () => {
-                        console.log('Remote disconnected');
-                        this.updateStatus(false);
-                        setTimeout(() => this.connect(), 3000);
-                    };
-
-                    this.ws.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                        this.updateStatus(false);
-                    };
-
-                    this.ws.onmessage = (event) => {
-                        try {
-                            const msg = JSON.parse(event.data);
-                            if (msg.type === 'STATUS') {
-                                this.showFeedback(msg.message);
-                            } else if (msg.type === 'TRACKS_RESPONSE') {
-                                this.handleTracksResponse(msg);
-                            } else if (msg.type === 'EPISODE_INFO') {
-                                this.handleEpisodeInfo(msg);
+                    if (window.remoteControl) {
+                        window.remoteControl.ws.onclose = null;
+                        window.remoteControl.ws.close();
+                    }
+                
+                    class MobileRemoteControl {
+                        constructor(roomId) {
+                            this.roomId = roomId;
+                            this.connect();
+                        }
+                
+                        connect() {
+                            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                            const wsUrl = `${protocol}//${window.location.host}/ws/remote-control?deviceType=REMOTE&roomId=${this.roomId}`;
+                
+                            this.ws = new WebSocket(wsUrl);
+                
+                            this.ws.onopen = () => {
+                                console.log('Remote connected to room:', this.roomId);
+                                this.updateStatus(true);
+                            };
+                
+                            this.ws.onclose = () => {
+                                console.log('Remote disconnected');
+                                this.updateStatus(false);
+                                setTimeout(() => this.connect(), 3000);
+                            };
+                
+                            this.ws.onerror = (error) => {
+                                console.error('WebSocket error:', error);
+                                this.updateStatus(false);
+                            };
+                
+                            this.ws.onmessage = (event) => {
+                                try {
+                                    const msg = JSON.parse(event.data);
+                                    if (msg.type === 'STATUS') {
+                                        this.showFeedback(msg.message);
+                                    } else if (msg.type === 'TRACKS_RESPONSE') {
+                                        this.handleTracksResponse(msg);
+                                    } else if (msg.type === 'EPISODE_INFO') {
+                                        this.handleEpisodeInfo(msg);
+                                    }
+                                } catch(e) {
+                                    console.error('Error parsing WebSocket message:', e);
+                                }
+                            };
+                        }
+                
+                        handleTracksResponse(msg) {
+                            console.log('Received tracks:', msg);
+                            // Dispatch custom event for Vaadin to handle
+                            const event = new CustomEvent('tracks-received', {
+                                detail: {
+                                    trackType: msg.trackType,
+                                    tracks: msg.tracks || []
+                                }
+                            });
+                            window.dispatchEvent(event);
+                        }
+                
+                        handleEpisodeInfo(msg) {
+                            console.log('Received episode info:', msg);
+                            // Update button states if needed
+                            const event = new CustomEvent('episode-info-received', {
+                                detail: msg
+                            });
+                            window.dispatchEvent(event);
+                        }
+                
+                        updateStatus(connected) {
+                            const statusEl = document.querySelector('.connection-status');
+                            if (statusEl) {
+                                statusEl.classList.toggle('connected', connected);
+                                statusEl.classList.toggle('disconnected', !connected);
                             }
-                        } catch(e) {
-                            console.error('Error parsing WebSocket message:', e);
                         }
-                    };
-                }
-
-                handleTracksResponse(msg) {
-                    console.log('Received tracks:', msg);
-                    // Dispatch custom event for Vaadin to handle
-                    const event = new CustomEvent('tracks-received', {
-                        detail: {
-                            trackType: msg.trackType,
-                            tracks: msg.tracks || []
+                
+                        sendCommand(action, target, data) {
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                const message = {
+                                    action: action,
+                                    target: target,
+                                    data: data,
+                                    roomId: this.roomId
+                                };
+                                this.ws.send(JSON.stringify(message));
+                                this.showFeedback(action);
+                            } else {
+                                this.showFeedback('Not connected', true);
+                            }
                         }
-                    });
-                    window.dispatchEvent(event);
-                }
-
-                handleEpisodeInfo(msg) {
-                    console.log('Received episode info:', msg);
-                    // Update button states if needed
-                    const event = new CustomEvent('episode-info-received', {
-                        detail: msg
-                    });
-                    window.dispatchEvent(event);
-                }
-
-                updateStatus(connected) {
-                    const statusEl = document.querySelector('.connection-status');
-                    if (statusEl) {
-                        statusEl.classList.toggle('connected', connected);
-                        statusEl.classList.toggle('disconnected', !connected);
+                
+                        showFeedback(action, isError) {
+                            // Brief visual feedback
+                            let feedback = document.getElementById('cmd-feedback');
+                            if (!feedback) {
+                                feedback = document.createElement('div');
+                                feedback.id = 'cmd-feedback';
+                                feedback.style.cssText = `
+                                    position: fixed; bottom: 20px; left: 50%;
+                                    transform: translateX(-50%);
+                                    padding: 12px 24px; border-radius: 25px;
+                                    background: var(--glass-bg, rgba(0,0,0,0.8));
+                                    color: white; font-weight: 500;
+                                    z-index: 9999; opacity: 0;
+                                    transition: opacity 0.2s ease;
+                                `;
+                                document.body.appendChild(feedback);
+                            }
+                
+                            feedback.textContent = action;
+                            feedback.style.background = isError ? '#f44336' : 'var(--glass-bg, rgba(0,0,0,0.8))';
+                            feedback.style.opacity = '1';
+                
+                            setTimeout(() => { feedback.style.opacity = '0'; }, 1000);
+                        }
                     }
-                }
-
-                sendCommand(action, target, data) {
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        const message = {
-                            action: action,
-                            target: target,
-                            data: data,
-                            roomId: this.roomId
-                        };
-                        this.ws.send(JSON.stringify(message));
-                        this.showFeedback(action);
-                    } else {
-                        this.showFeedback('Not connected', true);
-                    }
-                }
-
-                showFeedback(action, isError) {
-                    // Brief visual feedback
-                    let feedback = document.getElementById('cmd-feedback');
-                    if (!feedback) {
-                        feedback = document.createElement('div');
-                        feedback.id = 'cmd-feedback';
-                        feedback.style.cssText = `
-                            position: fixed; bottom: 20px; left: 50%;
-                            transform: translateX(-50%);
-                            padding: 12px 24px; border-radius: 25px;
-                            background: var(--glass-bg, rgba(0,0,0,0.8));
-                            color: white; font-weight: 500;
-                            z-index: 9999; opacity: 0;
-                            transition: opacity 0.2s ease;
-                        `;
-                        document.body.appendChild(feedback);
-                    }
-
-                    feedback.textContent = action;
-                    feedback.style.background = isError ? '#f44336' : 'var(--glass-bg, rgba(0,0,0,0.8))';
-                    feedback.style.opacity = '1';
-
-                    setTimeout(() => { feedback.style.opacity = '0'; }, 1000);
-                }
-            }
-
-            window.remoteControl = new MobileRemoteControl($0);
-        """, roomId);
+                
+                    window.remoteControl = new MobileRemoteControl($0);
+                """, roomId);
     }
 
     private void addStyles() {
         getElement().executeJs("""
-            const style = document.createElement('style');
-            style.textContent = `
-                .remote-control-view {
-                    background: var(--lumo-base-color);
-                    min-height: 100vh;
-                }
-
-                .remote-main-container {
-                    max-width: 500px;
-                    margin: 0 auto;
-                }
-
-                .remote-header {
-                    background: var(--glass-bg, rgba(17, 25, 40, 0.9));
-                    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                }
-
-                .remote-title {
-                    margin: 0;
-                    font-size: 1.25rem;
-                    color: var(--glass-text-primary, white);
-                }
-
-                .connection-status {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 6px 12px;
-                    border-radius: 20px;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.1));
-                }
-
-                .status-dot {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 50%;
-                    background: #f44336;
-                }
-
-                .connection-status.connected .status-dot {
-                    background: #4caf50;
-                    box-shadow: 0 0 8px #4caf50;
-                }
-
-                .status-text {
-                    font-size: 0.8rem;
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.7));
-                }
-
-                .room-section {
-                    background: var(--glass-bg, rgba(17, 25, 40, 0.5));
-                    border-radius: 16px;
-                    margin: 16px;
-                }
-
-                .room-info {
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.7));
-                    text-align: center;
-                }
-
-                .room-input {
-                    --vaadin-input-field-border-radius: 12px;
-                }
-
-                .connect-btn {
-                    margin-top: 8px;
-                }
-
-                .section-title {
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.6));
-                    font-size: 0.85rem;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    margin: 0 0 12px 0;
-                }
-
-                .nav-section {
-                    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-                }
-
-                .nav-btn {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 16px 8px;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
-                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                    border-radius: 12px;
-                    color: var(--glass-text-primary, white);
-                    font-size: 0.8rem;
-                }
-
-                .nav-btn:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
-                }
-
-                .controls-section {
-                    padding: 24px 16px;
-                }
-
-                .playback-row {
-                    gap: 24px;
-                    margin-bottom: 24px;
-                }
-
-                .control-btn {
-                    width: 64px;
-                    height: 64px;
-                    border-radius: 50%;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.1));
-                    border: 1px solid var(--glass-border, rgba(255,255,255,0.15));
-                    color: var(--glass-text-primary, white);
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    transition: all 0.2s ease;
-                }
-
-                .control-btn:hover, .control-btn:active {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.2));
-                    transform: scale(1.05);
-                }
-
-                .play-pause-btn {
-                    width: 80px;
-                    height: 80px;
-                    background: var(--glass-primary, var(--lumo-primary-color));
-                    border-color: var(--glass-primary, var(--lumo-primary-color));
-                }
-
-                .play-pause-btn:hover {
-                    background: var(--glass-primary-hover, var(--lumo-primary-color));
-                    box-shadow: 0 0 20px var(--glass-primary, var(--lumo-primary-color));
-                }
-
-                .btn-label {
-                    font-size: 0.65rem;
-                    margin-top: 4px;
-                    opacity: 0.8;
-                }
-
-                .volume-row {
-                    gap: 16px;
-                    margin-bottom: 24px;
-                }
-
-                .vol-btn {
-                    width: 56px;
-                    height: 56px;
-                }
-
-                .vol-label {
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.6));
-                    font-size: 0.85rem;
-                }
-
-                .display-row {
-                    gap: 12px;
-                }
-
-                .small-btn {
-                    padding: 10px 16px;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
-                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                    border-radius: 8px;
-                    color: var(--glass-text-primary, white);
-                    font-size: 0.8rem;
-                }
-
-                .small-btn:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
-                }
-
-                .search-section {
-                    margin: 16px;
-                    padding: 16px;
-                    background: var(--glass-bg, rgba(17, 25, 40, 0.5));
-                    border-radius: 16px;
-                }
-
-                .search-open-btn {
-                    background: var(--glass-primary-bg, rgba(99, 102, 241, 0.2));
-                    border: 1px solid var(--glass-primary, var(--lumo-primary-color));
-                }
-
-                .search-dialog {
-                    --lumo-dialog-overlay-background: var(--glass-bg, rgba(17, 25, 40, 0.98));
-                }
-
-                .dialog-close-btn {
-                    background: transparent;
-                    color: var(--glass-text-secondary);
-                }
-
-                .search-results {
-                    overflow-y: auto;
-                }
-
-                .production-item {
-                    padding: 12px;
-                    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-                    cursor: pointer;
-                    transition: background 0.2s ease;
-                }
-
-                .production-item:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.05));
-                }
-
-                .prod-title {
-                    font-weight: 500;
-                    color: var(--glass-text-primary, white);
-                }
-
-                .prod-meta {
-                    font-size: 0.8rem;
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.6));
-                }
-
-                .prod-play-btn {
-                    min-width: 44px;
-                    height: 44px;
-                    border-radius: 50%;
-                }
-
-                .no-results {
-                    text-align: center;
-                    color: var(--glass-text-secondary, rgba(255,255,255,0.5));
-                    padding: 32px;
-                }
-
-                .episode-row {
-                    gap: 12px;
-                    margin-bottom: 16px;
-                    padding: 0 16px;
-                }
-
-                .episode-btn {
-                    flex: 1;
-                    padding: 12px 16px;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
-                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                    border-radius: 8px;
-                    color: var(--glass-text-primary, white);
-                    font-size: 0.85rem;
-                }
-
-                .episode-btn:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
-                }
-
-                .media-row {
-                    gap: 12px;
-                    padding: 0 16px;
-                }
-
-                .media-btn {
-                    flex: 1;
-                    padding: 12px 16px;
-                    background: var(--glass-btn-bg, rgba(255,255,255,0.05));
-                    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                    border-radius: 8px;
-                    color: var(--glass-text-primary, white);
-                    font-size: 0.85rem;
-                }
-
-                .media-btn:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
-                }
-
-                .seasons-container {
-                    flex: 1;
-                }
-
-                .season-header:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1)) !important;
-                }
-
-                .episode-item:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.08));
-                }
-
-                .episode-play-btn {
-                    opacity: 0.6;
-                }
-
-                .episode-item:hover .episode-play-btn {
-                    opacity: 1;
-                }
-
-                .track-list {
-                    max-height: 300px;
-                    overflow-y: auto;
-                }
-
-                .track-item {
-                    padding: 12px 16px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    transition: background 0.2s ease;
-                }
-
-                .track-item:hover {
-                    background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
-                }
-
-                .track-item.active {
-                    background: var(--glass-primary-bg, rgba(99, 102, 241, 0.2));
-                    border: 1px solid var(--glass-primary, var(--lumo-primary-color));
-                }
-
-                .track-item .track-check {
-                    width: 20px;
-                    color: var(--glass-primary, var(--lumo-primary-color));
-                }
-
-                .track-item .track-name {
-                    flex: 1;
-                }
-            `;
-            document.head.appendChild(style);
-        """);
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .remote-control-view {
+                            background: var(--lumo-base-color);
+                            min-height: 100vh;
+                        }
+                
+                        .remote-main-container {
+                            max-width: 500px;
+                            margin: 0 auto;
+                        }
+                
+                        .remote-header {
+                            background: var(--glass-bg, rgba(17, 25, 40, 0.9));
+                            border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                        }
+                
+                        .remote-title {
+                            margin: 0;
+                            font-size: 1.25rem;
+                            color: var(--glass-text-primary, white);
+                        }
+                
+                        .connection-status {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 6px 12px;
+                            border-radius: 20px;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .status-dot {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 50%;
+                            background: #f44336;
+                        }
+                
+                        .connection-status.connected .status-dot {
+                            background: #4caf50;
+                            box-shadow: 0 0 8px #4caf50;
+                        }
+                
+                        .status-text {
+                            font-size: 0.8rem;
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.7));
+                        }
+                
+                        .room-section {
+                            background: var(--glass-bg, rgba(17, 25, 40, 0.5));
+                            border-radius: 16px;
+                            margin: 16px;
+                        }
+                
+                        .room-info {
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.7));
+                            text-align: center;
+                        }
+                
+                        .room-input {
+                            --vaadin-input-field-border-radius: 12px;
+                        }
+                
+                        .connect-btn {
+                            margin-top: 8px;
+                        }
+                
+                        .section-title {
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.6));
+                            font-size: 0.85rem;
+                            text-transform: uppercase;
+                            letter-spacing: 0.05em;
+                            margin: 0 0 12px 0;
+                        }
+                
+                        .nav-section {
+                            border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+                        }
+                
+                        .nav-btn {
+                            flex: 1;
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 16px 8px;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                            border-radius: 12px;
+                            color: var(--glass-text-primary, white);
+                            font-size: 0.8rem;
+                        }
+                
+                        .nav-btn:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .controls-section {
+                            padding: 24px 16px;
+                        }
+                
+                        .playback-row {
+                            gap: 24px;
+                            margin-bottom: 24px;
+                        }
+                
+                        .control-btn {
+                            width: 64px;
+                            height: 64px;
+                            border-radius: 50%;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.1));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.15));
+                            color: var(--glass-text-primary, white);
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            transition: all 0.2s ease;
+                        }
+                
+                        .control-btn:hover, .control-btn:active {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.2));
+                            transform: scale(1.05);
+                        }
+                
+                        .play-pause-btn {
+                            width: 80px;
+                            height: 80px;
+                            background: var(--glass-primary, var(--lumo-primary-color));
+                            border-color: var(--glass-primary, var(--lumo-primary-color));
+                        }
+                
+                        .play-pause-btn:hover {
+                            background: var(--glass-primary-hover, var(--lumo-primary-color));
+                            box-shadow: 0 0 20px var(--glass-primary, var(--lumo-primary-color));
+                        }
+                
+                        .btn-label {
+                            font-size: 0.65rem;
+                            margin-top: 4px;
+                            opacity: 0.8;
+                        }
+                
+                        .volume-row {
+                            gap: 16px;
+                            margin-bottom: 24px;
+                        }
+                
+                        .vol-btn {
+                            width: 56px;
+                            height: 56px;
+                        }
+                
+                        .vol-label {
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.6));
+                            font-size: 0.85rem;
+                        }
+                
+                        .display-row {
+                            gap: 12px;
+                        }
+                
+                        .small-btn {
+                            padding: 10px 16px;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                            border-radius: 8px;
+                            color: var(--glass-text-primary, white);
+                            font-size: 0.8rem;
+                        }
+                
+                        .small-btn:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .search-section {
+                            margin: 16px;
+                            padding: 16px;
+                            background: var(--glass-bg, rgba(17, 25, 40, 0.5));
+                            border-radius: 16px;
+                        }
+                
+                        .search-open-btn {
+                            background: var(--glass-primary-bg, rgba(99, 102, 241, 0.2));
+                            border: 1px solid var(--glass-primary, var(--lumo-primary-color));
+                        }
+                
+                        .search-dialog {
+                            --lumo-dialog-overlay-background: var(--glass-bg, rgba(17, 25, 40, 0.98));
+                        }
+                
+                        .dialog-close-btn {
+                            background: transparent;
+                            color: var(--glass-text-secondary);
+                        }
+                
+                        .search-results {
+                            overflow-y: auto;
+                        }
+                
+                        .production-item {
+                            padding: 12px;
+                            border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+                            cursor: pointer;
+                            transition: background 0.2s ease;
+                        }
+                
+                        .production-item:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.05));
+                        }
+                
+                        .prod-title {
+                            font-weight: 500;
+                            color: var(--glass-text-primary, white);
+                        }
+                
+                        .prod-meta {
+                            font-size: 0.8rem;
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.6));
+                        }
+                
+                        .prod-play-btn {
+                            min-width: 44px;
+                            height: 44px;
+                            border-radius: 50%;
+                        }
+                
+                        .no-results {
+                            text-align: center;
+                            color: var(--glass-text-secondary, rgba(255,255,255,0.5));
+                            padding: 32px;
+                        }
+                
+                        .episode-row {
+                            gap: 12px;
+                            margin-bottom: 16px;
+                            padding: 0 16px;
+                        }
+                
+                        .episode-btn {
+                            flex: 1;
+                            padding: 12px 16px;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                            border-radius: 8px;
+                            color: var(--glass-text-primary, white);
+                            font-size: 0.85rem;
+                        }
+                
+                        .episode-btn:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .media-row {
+                            gap: 12px;
+                            padding: 0 16px;
+                        }
+                
+                        .media-btn {
+                            flex: 1;
+                            padding: 12px 16px;
+                            background: var(--glass-btn-bg, rgba(255,255,255,0.05));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                            border-radius: 8px;
+                            color: var(--glass-text-primary, white);
+                            font-size: 0.85rem;
+                        }
+                
+                        .media-btn:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .seasons-container {
+                            flex: 1;
+                        }
+                
+                        .season-header:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1)) !important;
+                        }
+                
+                        .episode-item:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.08));
+                        }
+                
+                        .episode-play-btn {
+                            opacity: 0.6;
+                        }
+                
+                        .episode-item:hover .episode-play-btn {
+                            opacity: 1;
+                        }
+                
+                        .track-list {
+                            max-height: 300px;
+                            overflow-y: auto;
+                        }
+                
+                        .track-item {
+                            padding: 12px 16px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            transition: background 0.2s ease;
+                        }
+                
+                        .track-item:hover {
+                            background: var(--glass-btn-hover-bg, rgba(255,255,255,0.1));
+                        }
+                
+                        .track-item.active {
+                            background: var(--glass-primary-bg, rgba(99, 102, 241, 0.2));
+                            border: 1px solid var(--glass-primary, var(--lumo-primary-color));
+                        }
+                
+                        .track-item .track-check {
+                            width: 20px;
+                            color: var(--glass-primary, var(--lumo-primary-color));
+                        }
+                
+                        .track-item .track-name {
+                            flex: 1;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                """);
     }
 }
