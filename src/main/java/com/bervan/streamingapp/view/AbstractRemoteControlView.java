@@ -158,14 +158,14 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
             String inputRoom = roomInput.getValue();
             try {
                 TvPairingAdapter.connect(inputRoom);
-                if (inputRoom != null && !inputRoom.trim().isEmpty()) {
-                    roomId = inputRoom.trim();
-                    connectionText.setText("Room: " + roomId);
-                    addRemoteControlScript();
-                    section.setVisible(false);
-                }
             } catch (Exception ex) {
                 logger.error("Error connecting to room", ex);
+            }
+            if (inputRoom != null && !inputRoom.trim().isEmpty()) {
+                roomId = inputRoom.trim();
+                connectionText.setText("Room: " + roomId);
+                addRemoteControlScript();
+                section.setVisible(false);
             }
         });
 
