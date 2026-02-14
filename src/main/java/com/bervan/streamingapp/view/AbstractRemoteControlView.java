@@ -37,13 +37,15 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
     public static final String ROUTE_NAME = "/streaming-platform/remote-control";
     private final JsonLogger logger = JsonLogger.getLogger(AbstractRemoteControlView.class, "streaming");
     private final Map<String, ProductionData> streamingProductionData;
+    private final TvPairingAdapter tvPairingAdapter;
     private String roomId;
     private Div connectionStatus;
     private Span connectionText;
 
-    public AbstractRemoteControlView(Map<String, ProductionData> streamingProductionData) {
+    public AbstractRemoteControlView(Map<String, ProductionData> streamingProductionData, TvPairingAdapter tvPairingAdapter) {
         super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME, AbstractProductionDetailsView.ROUTE_NAME);
         this.streamingProductionData = streamingProductionData;
+        this.tvPairingAdapter = tvPairingAdapter;
         addClassName("remote-control-view");
     }
 
@@ -157,7 +159,7 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
         connectBtn.addClickListener(e -> {
             String inputRoom = roomInput.getValue();
             try {
-                TvPairingAdapter.connect(inputRoom);
+                tvPairingAdapter.connect(inputRoom);
             } catch (Exception ex) {
                 logger.error("Error connecting to room", ex);
             }

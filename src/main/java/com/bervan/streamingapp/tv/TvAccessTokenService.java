@@ -1,6 +1,7 @@
 package com.bervan.streamingapp.tv;
 
-import com.bervan.common.service.AuthService;
+import com.bervan.common.user.User;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -19,25 +20,20 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class TvAccessTokenService {
 
-    private static final long DEFAULT_TTL_SECONDS = 60 * 60; // 1 hour
-
-    private static class Entry {
-        final UUID userId;
-        final Instant expiresAt;
-
-        Entry(UUID userId, Instant expiresAt) {
-            this.userId = userId;
-            this.expiresAt = expiresAt;
-        }
-    }
-
+    private static final long DEFAULT_TTL_SECONDS = 60 * 60 * 24; // 24 hour
     private final Map<String, Entry> tokenStore = new ConcurrentHashMap<>();
 
     /**
      * Create a token for currently logged in user.
      */
     public String createTokenForCurrentUser() {
-        UUID userId = AuthService.getLoggedUserId();
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof String) {
+            if ("anonymousUser".equals(principal)) {
+                throw new IllegalStateException("No logged in user, cannot create TV access token");
+            }
+        }
+        UUID userId = ((User) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
         if (userId == null) {
             throw new IllegalStateException("No logged in user, cannot create TV access token");
         }
@@ -63,6 +59,16 @@ public class TvAccessTokenService {
             return Optional.empty();
         }
         return Optional.of(entry.userId);
+    }
+
+    private static class Entry {
+        final UUID userId;
+        final Instant expiresAt;
+
+        Entry(UUID userId, Instant expiresAt) {
+            this.userId = userId;
+            this.expiresAt = expiresAt;
+        }
     }
 }
 
