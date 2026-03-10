@@ -9,7 +9,9 @@ import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.view.AbstractProductionDetailsView;
 import com.bervan.streamingapp.view.AbstractRemoteControlSupportedView;
-import com.vaadin.flow.component.*;
+import com.vaadin.flow.component.ClientCallable;
+import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dependency.JavaScript;
 import com.vaadin.flow.component.html.H4;
@@ -130,20 +132,18 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void addDownloadButton(Metadata video) {
-        findProductionData(video).ifPresent(productionData -> {
-            Button download = createStyledButton("Download");
-            download.addClickListener(e -> {
-                showPrimaryNotification("Download started. The file will be downloaded shortly.");
+        Button download = createStyledButton("Download");
+        download.addClickListener(e -> {
+            showPrimaryNotification("Download started. The file will be downloaded shortly.");
 
-                String downloadUrl = "/storage/videos/download-and-convert/" + video.getId();
+            String downloadUrl = "/storage/videos/download-and-convert/" + video.getId();
 
-                UI.getCurrent().getPage().executeJs(
-                        "window.open($0, '_blank');",
-                        downloadUrl
-                );
-            });
-            navigationBar.add(download);
+            UI.getCurrent().getPage().executeJs(
+                    "window.open($0, '_blank');",
+                    downloadUrl
+            );
         });
+        navigationBar.add(download);
     }
 
     private void addPreviousButton(Metadata video) {
@@ -255,43 +255,43 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         String domId = videoPlayer.getPlayerUniqueId();
         getElement().executeJs(
                 "var vid = $0;" +
-                "var seekStep = $1;" +
-                "if(window._playerKeyHandler) { document.removeEventListener('keydown', window._playerKeyHandler); }" +
-                "window._playerKeyHandler = function(e) {" +
-                "  var video = document.getElementById(vid);" +
-                "  if(!video) return;" +
-                "  var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';" +
-                "  if(tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;" +
-                "  switch(e.code) {" +
-                "    case 'Space':" +
-                "      e.preventDefault(); e.stopPropagation();" +
-                "      video.paused ? video.play() : video.pause();" +
-                "      break;" +
-                "    case 'ArrowRight':" +
-                "      e.preventDefault(); e.stopPropagation();" +
-                "      video.currentTime += seekStep;" +
-                "      break;" +
-                "    case 'ArrowLeft':" +
-                "      e.preventDefault(); e.stopPropagation();" +
-                "      video.currentTime -= seekStep;" +
-                "      break;" +
-                "    case 'KeyB':" +
-                "      e.preventDefault();" +
-                "      if(video.textTracks.length >= 1) {" +
-                "        var showing = false;" +
-                "        for(var i=0; i<video.textTracks.length; i++) { if(video.textTracks[i].mode==='showing') { showing=true; break; } }" +
-                "        for(var i=0; i<video.textTracks.length; i++) { video.textTracks[i].mode = showing ? 'hidden' : (i===0 ? 'showing' : 'hidden'); }" +
-                "      }" +
-                "      break;" +
-                "    case 'KeyF':" +
-                "      e.preventDefault();" +
-                "      if(document.fullscreenElement===video) { document.exitFullscreen(); }" +
-                "      else if(video.requestFullscreen) { video.requestFullscreen(); }" +
-                "      else if(video.webkitRequestFullscreen) { video.webkitRequestFullscreen(); }" +
-                "      break;" +
-                "  }" +
-                "};" +
-                "document.addEventListener('keydown', window._playerKeyHandler, true);",
+                        "var seekStep = $1;" +
+                        "if(window._playerKeyHandler) { document.removeEventListener('keydown', window._playerKeyHandler); }" +
+                        "window._playerKeyHandler = function(e) {" +
+                        "  var video = document.getElementById(vid);" +
+                        "  if(!video) return;" +
+                        "  var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';" +
+                        "  if(tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;" +
+                        "  switch(e.code) {" +
+                        "    case 'Space':" +
+                        "      e.preventDefault(); e.stopPropagation();" +
+                        "      video.paused ? video.play() : video.pause();" +
+                        "      break;" +
+                        "    case 'ArrowRight':" +
+                        "      e.preventDefault(); e.stopPropagation();" +
+                        "      video.currentTime += seekStep;" +
+                        "      break;" +
+                        "    case 'ArrowLeft':" +
+                        "      e.preventDefault(); e.stopPropagation();" +
+                        "      video.currentTime -= seekStep;" +
+                        "      break;" +
+                        "    case 'KeyB':" +
+                        "      e.preventDefault();" +
+                        "      if(video.textTracks.length >= 1) {" +
+                        "        var showing = false;" +
+                        "        for(var i=0; i<video.textTracks.length; i++) { if(video.textTracks[i].mode==='showing') { showing=true; break; } }" +
+                        "        for(var i=0; i<video.textTracks.length; i++) { video.textTracks[i].mode = showing ? 'hidden' : (i===0 ? 'showing' : 'hidden'); }" +
+                        "      }" +
+                        "      break;" +
+                        "    case 'KeyF':" +
+                        "      e.preventDefault();" +
+                        "      if(document.fullscreenElement===video) { document.exitFullscreen(); }" +
+                        "      else if(video.requestFullscreen) { video.requestFullscreen(); }" +
+                        "      else if(video.webkitRequestFullscreen) { video.webkitRequestFullscreen(); }" +
+                        "      break;" +
+                        "  }" +
+                        "};" +
+                        "document.addEventListener('keydown', window._playerKeyHandler, true);",
                 domId, SEEK_STEP_SECONDS
         );
     }
