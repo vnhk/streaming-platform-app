@@ -14,6 +14,7 @@ import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,6 +34,108 @@ public class VideoController {
     public VideoController(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
         this.videoManager = videoManager;
         this.streamingProductionData = streamingProductionData;
+    }
+
+    @GetMapping("/download-and-convert/{videoFolderId}")
+    public ResponseEntity<StreamingResponseBody> downloadAndConvert(@PathVariable String videoFolderId) {
+        try {
+            // Security check
+            if (AuthService.getLoggedUserId() == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            // Load video metadata
+            List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
+            if (videoFolder.size() != 1) {
+                log.error("Could not find file based on provided id: " + videoFolderId);
+                return ResponseEntity.badRequest().build();
+            }
+
+            Metadata videoFolderSingle = videoFolder.get(0);
+            Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
+
+            // Find the main m3u8 file
+            Path mainM3u8 = findMainM3u8File(hlsBaseDir);
+            if (mainM3u8 == null || !Files.exists(mainM3u8)) {
+                log.error("Could not find main m3u8 file in directory: " + hlsBaseDir);
+                return ResponseEntity.badRequest().build();
+            }
+
+            String outputFilename = videoFolderSingle.getFilename() + ".mp4";
+
+            StreamingResponseBody stream = outputStream -> {
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.command(
+                        "ffmpeg",
+                        "-i", mainM3u8.toString(),
+                        "-c", "copy",  // Copy streams without re-encoding for speed
+                        "-bsf:a", "aac_adtstoasc",  // Fix AAC stream if needed
+                        "-f", "mp4",
+                        "-movflags", "frag_keyframe+empty_moov",  // Enable streaming
+                        "pipe:1"  // Output to stdout
+                );
+
+                processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
+
+                try {
+                    Process process = processBuilder.start();
+
+                    // Stream the output directly to the response
+                    try (var processOutput = process.getInputStream()) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = processOutput.read(buffer)) != -1) {
+                            outputStream.write(buffer, 0, bytesRead);
+                            outputStream.flush();
+                        }
+                    }
+
+                    // Wait for process to complete and log any errors
+                    int exitCode = process.waitFor();
+                    if (exitCode != 0) {
+                        try (var errorStream = process.getErrorStream()) {
+                            String errorOutput = new String(errorStream.readAllBytes());
+                            log.error("FFmpeg process failed with exit code " + exitCode + ": " + errorOutput);
+                        }
+                    }
+
+                } catch (Exception e) {
+                    log.error("Error during FFmpeg conversion", e);
+                    throw new RuntimeException("Conversion failed", e);
+                }
+            };
+
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
+                    .contentType(MediaType.valueOf("video/mp4"))
+                    .body(stream);
+
+        } catch (Exception e) {
+            log.error("Error in downloadAndConvert", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private Path findMainM3u8File(Path hlsBaseDir) {
+        try {
+            // Look for the main playlist file (usually has the highest resolution or is the master playlist)
+            return Files.walk(hlsBaseDir)
+                    .filter(path -> path.toString().toLowerCase().endsWith(".m3u8"))
+                    .filter(path -> {
+                        try {
+                            // Check if it's a master playlist by looking for #EXT-X-STREAM-INF
+                            String content = Files.readString(path);
+                            return content.contains("#EXT-X-STREAM-INF") || content.contains("#EXTINF");
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    })
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            log.error("Error searching for m3u8 file", e);
+            return null;
+        }
     }
 
     @GetMapping("/poster/{folderId}")

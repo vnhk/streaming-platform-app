@@ -116,6 +116,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
     private void buildNavigationBar(Metadata video) {
         addDetailsButton(video);
+        addDownloadButton(video);
         addPreviousButton(video);
         addNextButton(video);
     }
@@ -125,6 +126,23 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
             Button detailsBtn = createStyledButton(productionData.getProductionName() + " - Details");
             detailsBtn.addClickListener(e -> navigateToDetails(productionData.getProductionId()));
             navigationBar.add(detailsBtn);
+        });
+    }
+
+    private void addDownloadButton(Metadata video) {
+        findProductionData(video).ifPresent(productionData -> {
+            Button download = createStyledButton("Download");
+            download.addClickListener(e -> {
+                showPrimaryNotification("Download started. The file will be downloaded shortly.");
+
+                String downloadUrl = "/storage/videos/download-and-convert/" + video.getId();
+
+                UI.getCurrent().getPage().executeJs(
+                        "window.open($0, '_blank');",
+                        downloadUrl
+                );
+            });
+            navigationBar.add(download);
         });
     }
 
