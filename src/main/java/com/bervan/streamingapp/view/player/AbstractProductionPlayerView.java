@@ -124,6 +124,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void addDetailsButton(Metadata video) {
+        //doesnt work for tv series?
         findProductionData(video).ifPresent(productionData -> {
             Button detailsBtn = createStyledButton(productionData.getProductionName() + " - Details");
             detailsBtn.addClickListener(e -> navigateToDetails(productionData.getProductionId()));
