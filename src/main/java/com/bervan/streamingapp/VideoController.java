@@ -16,13 +16,13 @@ import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/storage/videos")
@@ -61,53 +61,91 @@ public class VideoController {
                 return ResponseEntity.badRequest().build();
             }
 
+            log.info("Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
             String outputFilename = videoFolderSingle.getFilename() + ".mp4";
 
             StreamingResponseBody stream = outputStream -> {
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 processBuilder.command(
                         "ffmpeg",
+                        "-y",  // Overwrite output without asking
                         "-i", mainM3u8.toString(),
-                        "-c", "copy",  // Copy streams without re-encoding for speed
-                        "-bsf:a", "aac_adtstoasc",  // Fix AAC stream if needed
+                        "-c:v", "libx264",  // Re-encode video to ensure compatibility
+                        "-c:a", "aac",      // Re-encode audio to AAC
+                        "-preset", "fast",   // Fast encoding preset
+                        "-crf", "23",        // Constant Rate Factor for quality
+                        "-movflags", "frag_keyframe+empty_moov+faststart",  // Enable streaming and fast start
                         "-f", "mp4",
-                        "-movflags", "frag_keyframe+empty_moov",  // Enable streaming
                         "pipe:1"  // Output to stdout
                 );
 
+                // Set working directory to the HLS directory
+                processBuilder.directory(hlsBaseDir.toFile());
                 processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
 
+                Process process = null;
                 try {
-                    Process process = processBuilder.start();
+                    process = processBuilder.start();
+
+                    // Create a thread to read and log stderr
+                    final Process finalProcess = process;
+                    Thread errorReaderThread = new Thread(() -> {
+                        try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
+                            String line;
+                            while ((line = errorReader.readLine()) != null) {
+                                log.info("FFmpeg: " + line);
+                            }
+                        } catch (IOException e) {
+                            log.error("Error reading FFmpeg stderr", e);
+                        }
+                    });
+                    errorReaderThread.start();
 
                     // Stream the output directly to the response
-                    try (var processOutput = process.getInputStream()) {
-                        byte[] buffer = new byte[8192];
+                    try (var processOutput = process.getInputStream();
+                         var bufferedOutput = new BufferedOutputStream(outputStream, 32768)) {
+
+                        byte[] buffer = new byte[32768];  // Larger buffer
                         int bytesRead;
+                        long totalBytes = 0;
+
                         while ((bytesRead = processOutput.read(buffer)) != -1) {
-                            outputStream.write(buffer, 0, bytesRead);
-                            outputStream.flush();
+                            bufferedOutput.write(buffer, 0, bytesRead);
+                            bufferedOutput.flush();
+                            totalBytes += bytesRead;
+
+                            // Log progress every 10MB
+                            if (totalBytes % (10 * 1024 * 1024) == 0) {
+                                log.info("Streamed " + (totalBytes / 1024 / 1024) + " MB");
+                            }
                         }
+
+                        log.info("Total bytes streamed: " + totalBytes);
                     }
 
                     // Wait for process to complete and log any errors
                     int exitCode = process.waitFor();
+                    errorReaderThread.join(5000); // Wait max 5 seconds for error thread
+
                     if (exitCode != 0) {
-                        try (var errorStream = process.getErrorStream()) {
-                            String errorOutput = new String(errorStream.readAllBytes());
-                            log.error("FFmpeg process failed with exit code " + exitCode + ": " + errorOutput);
-                        }
+                        log.error("FFmpeg process failed with exit code: " + exitCode);
+                        throw new RuntimeException("FFmpeg conversion failed with exit code: " + exitCode);
                     }
+
+                    log.info("FFmpeg conversion completed successfully");
 
                 } catch (Exception e) {
                     log.error("Error during FFmpeg conversion", e);
+                    if (process != null) {
+                        process.destroyForcibly();
+                    }
                     throw new RuntimeException("Conversion failed", e);
                 }
             };
 
             return ResponseEntity.ok()
                     .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
-                    .contentType(MediaType.valueOf("video/mp4"))
+                    .header("Content-Type", "video/mp4")
                     .body(stream);
 
         } catch (Exception e) {
@@ -118,20 +156,46 @@ public class VideoController {
 
     private Path findMainM3u8File(Path hlsBaseDir) {
         try {
-            // Look for the main playlist file (usually has the highest resolution or is the master playlist)
-            return Files.walk(hlsBaseDir)
+            // Look for the main playlist file
+            List<Path> m3u8Files = Files.walk(hlsBaseDir)
                     .filter(path -> path.toString().toLowerCase().endsWith(".m3u8"))
-                    .filter(path -> {
-                        try {
-                            // Check if it's a master playlist by looking for #EXT-X-STREAM-INF
-                            String content = Files.readString(path);
-                            return content.contains("#EXT-X-STREAM-INF") || content.contains("#EXTINF");
-                        } catch (IOException e) {
-                            return false;
-                        }
-                    })
-                    .findFirst()
-                    .orElse(null);
+                    .collect(Collectors.toList());
+
+            log.info("Found " + m3u8Files.size() + " m3u8 files: " + m3u8Files);
+
+            // Try to find master playlist first
+            for (Path m3u8File : m3u8Files) {
+                try {
+                    String content = Files.readString(m3u8File);
+                    if (content.contains("#EXT-X-STREAM-INF")) {
+                        log.info("Found master playlist: " + m3u8File);
+                        return m3u8File;
+                    }
+                } catch (IOException e) {
+                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                }
+            }
+
+            // If no master playlist found, look for media playlist
+            for (Path m3u8File : m3u8Files) {
+                try {
+                    String content = Files.readString(m3u8File);
+                    if (content.contains("#EXTINF")) {
+                        log.info("Found media playlist: " + m3u8File);
+                        return m3u8File;
+                    }
+                } catch (IOException e) {
+                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                }
+            }
+
+            // Fallback to first m3u8 file found
+            if (!m3u8Files.isEmpty()) {
+                log.info("Using first m3u8 file found: " + m3u8Files.get(0));
+                return m3u8Files.get(0);
+            }
+
+            return null;
         } catch (IOException e) {
             log.error("Error searching for m3u8 file", e);
             return null;
