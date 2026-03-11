@@ -14,9 +14,13 @@ import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.WebAsyncTask;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -37,121 +41,208 @@ public class VideoController {
     }
 
     @GetMapping("/download-and-convert/{videoFolderId}")
-    public ResponseEntity<StreamingResponseBody> downloadAndConvert(@PathVariable String videoFolderId) {
-        try {
-            // Security check
-            if (AuthService.getLoggedUserId() == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-
-            // Load video metadata
-            List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
-            if (videoFolder.size() != 1) {
-                log.error("Could not find file based on provided id: " + videoFolderId);
-                return ResponseEntity.badRequest().build();
-            }
-
-            Metadata videoFolderSingle = videoFolder.get(0);
-            Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
-
-            // Find the main m3u8 file
-            Path mainM3u8 = findMainM3u8File(hlsBaseDir);
-            if (mainM3u8 == null || !Files.exists(mainM3u8)) {
-                log.error("Could not find main m3u8 file in directory: " + hlsBaseDir);
-                return ResponseEntity.badRequest().build();
-            }
-
-            log.info("Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
-            String outputFilename = videoFolderSingle.getFilename() + ".mp4";
-
-            StreamingResponseBody stream = outputStream -> {
-                ProcessBuilder processBuilder = new ProcessBuilder();
-                processBuilder.command(
-                        "ffmpeg",
-                        "-y",  // Overwrite output without asking
-                        "-i", mainM3u8.toString(),
-                        "-c:v", "libx264",  // Re-encode video to ensure compatibility
-                        "-c:a", "aac",      // Re-encode audio to AAC
-                        "-preset", "fast",   // Fast encoding preset
-                        "-crf", "23",        // Constant Rate Factor for quality
-                        "-movflags", "frag_keyframe+empty_moov+faststart",  // Enable streaming and fast start
-                        "-f", "mp4",
-                        "pipe:1"  // Output to stdout
-                );
-
-                // Set working directory to the HLS directory
-                processBuilder.directory(hlsBaseDir.toFile());
-                processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
-
-                Process process = null;
-                try {
-                    process = processBuilder.start();
-
-                    // Create a thread to read and log stderr
-                    final Process finalProcess = process;
-                    Thread errorReaderThread = new Thread(() -> {
-                        try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
-                            String line;
-                            while ((line = errorReader.readLine()) != null) {
-                                log.info("FFmpeg: " + line);
-                            }
-                        } catch (IOException e) {
-                            log.error("Error reading FFmpeg stderr", e);
-                        }
-                    });
-                    errorReaderThread.start();
-
-                    // Stream the output directly to the response
-                    try (var processOutput = process.getInputStream();
-                         var bufferedOutput = new BufferedOutputStream(outputStream, 32768)) {
-
-                        byte[] buffer = new byte[32768];  // Larger buffer
-                        int bytesRead;
-                        long totalBytes = 0;
-
-                        while ((bytesRead = processOutput.read(buffer)) != -1) {
-                            bufferedOutput.write(buffer, 0, bytesRead);
-                            bufferedOutput.flush();
-                            totalBytes += bytesRead;
-
-                            // Log progress every 10MB
-                            if (totalBytes % (10 * 1024 * 1024) == 0) {
-                                log.info("Streamed " + (totalBytes / 1024 / 1024) + " MB");
-                            }
+    public WebAsyncTask<ResponseEntity<StreamingResponseBody>> downloadAndConvert(@PathVariable String videoFolderId) {
+        // Create WebAsyncTask with 30-minute timeout only for this endpoint
+        WebAsyncTask<ResponseEntity<StreamingResponseBody>> webAsyncTask = new WebAsyncTask<>(
+                30 * 60 * 1000L, // 30 minutes timeout
+                () -> {
+                    try {
+                        // Security check
+                        if (AuthService.getLoggedUserId() == null) {
+                            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
                         }
 
-                        log.info("Total bytes streamed: " + totalBytes);
+                        // Load video metadata
+                        List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
+                        if (videoFolder.size() != 1) {
+                            log.error("Could not find file based on provided id: " + videoFolderId);
+                            return ResponseEntity.badRequest().build();
+                        }
+
+                        Metadata videoFolderSingle = videoFolder.get(0);
+                        Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
+
+                        // Find the main m3u8 file
+                        Path mainM3u8 = findMainM3u8File(hlsBaseDir);
+                        if (mainM3u8 == null || !Files.exists(mainM3u8)) {
+                            log.error("Could not find main m3u8 file in directory: " + hlsBaseDir);
+                            return ResponseEntity.badRequest().build();
+                        }
+
+                        log.info("Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
+                        String outputFilename = videoFolderSingle.getFilename() + ".mp4";
+
+                        StreamingResponseBody stream = outputStream -> {
+                            Process process = null;
+                            Thread errorReaderThread = null;
+                            long startTime = System.currentTimeMillis();
+
+                            try {
+                                ProcessBuilder processBuilder = new ProcessBuilder();
+                                processBuilder.command(
+                                        "ffmpeg",
+                                        "-y",  // Overwrite output without asking
+                                        "-i", mainM3u8.toString(),
+                                        "-c:v", "libx264",  // Re-encode video to ensure compatibility
+                                        "-c:a", "aac",      // Re-encode audio to AAC
+                                        "-preset", "fast",   // Fast encoding preset
+                                        "-crf", "23",        // Constant Rate Factor for quality
+                                        "-movflags", "frag_keyframe+empty_moov+faststart",  // Enable streaming and fast start
+                                        "-f", "mp4",
+                                        "-progress", "pipe:2",  // Send progress to stderr
+                                        "pipe:1"  // Output to stdout
+                                );
+
+                                // Set working directory to the HLS directory
+                                processBuilder.directory(hlsBaseDir.toFile());
+                                processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
+
+                                process = processBuilder.start();
+                                final Process finalProcess = process;
+
+                                // Create a thread to read and log stderr with progress tracking
+                                errorReaderThread = new Thread(() -> {
+                                    try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
+                                        String line;
+                                        long lastProgressTime = System.currentTimeMillis();
+
+                                        while ((line = errorReader.readLine()) != null) {
+                                            long currentTime = System.currentTimeMillis();
+
+                                            // Log progress every 30 seconds instead of every line
+                                            if (line.contains("frame=") && (currentTime - lastProgressTime) > 30000) {
+                                                log.info("FFmpeg progress: " + line);
+                                                lastProgressTime = currentTime;
+                                            } else if (line.contains("Error") || line.contains("error") || line.contains("Warning")) {
+                                                log.warn("FFmpeg: " + line);
+                                            }
+                                        }
+                                    } catch (IOException e) {
+                                        log.debug("Error reading FFmpeg stderr (likely process terminated): " + e.getMessage());
+                                    }
+                                });
+                                errorReaderThread.setDaemon(true); // Make it a daemon thread
+                                errorReaderThread.start();
+
+                                // Stream the output directly to the response
+                                try (var processOutput = process.getInputStream()) {
+                                    byte[] buffer = new byte[65536];  // 64KB buffer for better performance
+                                    int bytesRead;
+                                    long totalBytes = 0;
+                                    long lastHeartbeat = System.currentTimeMillis();
+
+                                    while ((bytesRead = processOutput.read(buffer)) != -1) {
+                                        try {
+                                            outputStream.write(buffer, 0, bytesRead);
+                                            totalBytes += bytesRead;
+
+                                            long currentTime = System.currentTimeMillis();
+
+                                            // Flush every 1MB or every 10 seconds
+                                            if (totalBytes % (1024 * 1024) == 0 || (currentTime - lastHeartbeat) > 10000) {
+                                                outputStream.flush();
+                                                lastHeartbeat = currentTime;
+
+                                                // Log progress every 100MB
+                                                if (totalBytes % (100 * 1024 * 1024) == 0) {
+                                                    long elapsedSeconds = (currentTime - startTime) / 1000;
+                                                    log.info("Streamed " + (totalBytes / 1024 / 1024) + " MB in " + elapsedSeconds + " seconds");
+                                                }
+                                            }
+
+                                        } catch (IOException e) {
+                                            // Client disconnected or connection lost
+                                            long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
+                                            log.info("Client disconnected after {} seconds. Total bytes sent: {} MB. Terminating FFmpeg process.",
+                                                    elapsedTime, totalBytes / 1024 / 1024);
+                                            if (process != null && process.isAlive()) {
+                                                process.destroyForcibly();
+                                            }
+                                            return;
+                                        }
+                                    }
+
+                                    long totalTime = (System.currentTimeMillis() - startTime) / 1000;
+                                    log.info("Conversion completed. Total: {} MB in {} seconds",
+                                            totalBytes / 1024 / 1024, totalTime);
+
+                                } catch (IOException e) {
+                                    log.warn("Stream interrupted after {} seconds: {}",
+                                            (System.currentTimeMillis() - startTime) / 1000, e.getMessage());
+                                    if (process != null && process.isAlive()) {
+                                        process.destroyForcibly();
+                                    }
+                                    return;
+                                }
+
+                                // Wait for process to complete
+                                int exitCode = process.waitFor();
+
+                                if (errorReaderThread != null && errorReaderThread.isAlive()) {
+                                    errorReaderThread.join(2000);
+                                }
+
+                                if (exitCode != 0) {
+                                    log.error("FFmpeg process failed with exit code: {} after {} seconds",
+                                            exitCode, (System.currentTimeMillis() - startTime) / 1000);
+                                    return;
+                                }
+
+                                long totalTime = (System.currentTimeMillis() - startTime) / 1000;
+                                log.info("FFmpeg conversion completed successfully in {} seconds", totalTime);
+
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
+                                log.info("Conversion interrupted after {} seconds", elapsedTime);
+                                if (process != null && process.isAlive()) {
+                                    process.destroyForcibly();
+                                }
+                            } catch (Exception e) {
+                                long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
+                                log.error("Error during FFmpeg conversion after {} seconds: {}", elapsedTime, e.getMessage());
+                                if (process != null && process.isAlive()) {
+                                    process.destroyForcibly();
+                                }
+                            } finally {
+                                // Cleanup
+                                if (process != null && process.isAlive()) {
+                                    try {
+                                        if (!process.destroyForcibly().waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                                            log.warn("FFmpeg process did not terminate within 5 seconds");
+                                        }
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                }
+
+                                if (errorReaderThread != null && errorReaderThread.isAlive()) {
+                                    errorReaderThread.interrupt();
+                                }
+                            }
+                        };
+
+                        return ResponseEntity.ok()
+                                .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
+                                .header("Content-Type", "video/mp4")
+                                .header("Cache-Control", "no-cache")
+                                .body(stream);
+
+                    } catch (Exception e) {
+                        log.error("Error in downloadAndConvert", e);
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
                     }
-
-                    // Wait for process to complete and log any errors
-                    int exitCode = process.waitFor();
-                    errorReaderThread.join(5000); // Wait max 5 seconds for error thread
-
-                    if (exitCode != 0) {
-                        log.error("FFmpeg process failed with exit code: " + exitCode);
-                        throw new RuntimeException("FFmpeg conversion failed with exit code: " + exitCode);
-                    }
-
-                    log.info("FFmpeg conversion completed successfully");
-
-                } catch (Exception e) {
-                    log.error("Error during FFmpeg conversion", e);
-                    if (process != null) {
-                        process.destroyForcibly();
-                    }
-                    throw new RuntimeException("Conversion failed", e);
                 }
-            };
+        );
 
-            return ResponseEntity.ok()
-                    .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
-                    .header("Content-Type", "video/mp4")
-                    .body(stream);
+        // Optional: Add timeout handler
+        webAsyncTask.onTimeout(() -> {
+            log.warn("Video conversion timed out after 30 minutes");
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                    .build();
+        });
 
-        } catch (Exception e) {
-            log.error("Error in downloadAndConvert", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        return webAsyncTask;
     }
 
     private Path findMainM3u8File(Path hlsBaseDir) {
