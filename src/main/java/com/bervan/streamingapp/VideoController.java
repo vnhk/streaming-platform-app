@@ -2,6 +2,7 @@ package com.bervan.streamingapp;
 
 import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.logging.BaseProcessContext;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.MetadataByPathAndType;
 import com.bervan.streamingapp.config.ProductionData;
@@ -42,6 +43,8 @@ public class VideoController {
 
     @GetMapping("/download-and-convert/{videoFolderId}")
     public WebAsyncTask<ResponseEntity<StreamingResponseBody>> downloadAndConvert(@PathVariable String videoFolderId) {
+        BaseProcessContext context = BaseProcessContext.builder()
+                .processName("download-and-convert").build();
         // Create WebAsyncTask with 30-minute timeout only for this endpoint
         WebAsyncTask<ResponseEntity<StreamingResponseBody>> webAsyncTask = new WebAsyncTask<>(
                 30 * 60 * 1000L, // 30 minutes timeout
@@ -55,7 +58,7 @@ public class VideoController {
                         // Load video metadata
                         List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
                         if (videoFolder.size() != 1) {
-                            log.error("Could not find file based on provided id: " + videoFolderId);
+                            log.error(context.map(), "Could not find file based on provided id: " + videoFolderId);
                             return ResponseEntity.badRequest().build();
                         }
 
@@ -63,13 +66,13 @@ public class VideoController {
                         Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
 
                         // Find the main m3u8 file
-                        Path mainM3u8 = findMainM3u8File(hlsBaseDir);
+                        Path mainM3u8 = findMainM3u8File(hlsBaseDir, context);
                         if (mainM3u8 == null || !Files.exists(mainM3u8)) {
-                            log.error("Could not find main m3u8 file in directory: " + hlsBaseDir);
+                            log.error(context.map(), "Could not find main m3u8 file in directory: " + hlsBaseDir);
                             return ResponseEntity.badRequest().build();
                         }
 
-                        log.info("Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
+                        log.info(context.map(), "Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
                         String outputFilename = videoFolderSingle.getFilename() + ".mp4";
 
                         StreamingResponseBody stream = outputStream -> {
@@ -111,14 +114,14 @@ public class VideoController {
 
                                             // Log progress every 30 seconds instead of every line
                                             if (line.contains("frame=") && (currentTime - lastProgressTime) > 30000) {
-                                                log.info("FFmpeg progress: " + line);
+                                                log.debug(context.map(), "FFmpeg progress: " + line);
                                                 lastProgressTime = currentTime;
                                             } else if (line.contains("Error") || line.contains("error") || line.contains("Warning")) {
-                                                log.warn("FFmpeg: " + line);
+                                                log.warn(context.map(), "FFmpeg: " + line);
                                             }
                                         }
                                     } catch (IOException e) {
-                                        log.debug("Error reading FFmpeg stderr (likely process terminated): " + e.getMessage());
+                                        log.debug(context.map(), "Error reading FFmpeg stderr (likely process terminated): " + e.getMessage());
                                     }
                                 });
                                 errorReaderThread.setDaemon(true); // Make it a daemon thread
@@ -146,14 +149,14 @@ public class VideoController {
                                                 // Log progress every 100MB
                                                 if (totalBytes % (100 * 1024 * 1024) == 0) {
                                                     long elapsedSeconds = (currentTime - startTime) / 1000;
-                                                    log.info("Streamed " + (totalBytes / 1024 / 1024) + " MB in " + elapsedSeconds + " seconds");
+                                                    log.info(context.map(), "Streamed " + (totalBytes / 1024 / 1024) + " MB in " + elapsedSeconds + " seconds");
                                                 }
                                             }
 
                                         } catch (IOException e) {
                                             // Client disconnected or connection lost
                                             long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                            log.info("Client disconnected after {} seconds. Total bytes sent: {} MB. Terminating FFmpeg process.",
+                                            log.info(context.map(), "Client disconnected after {} seconds. Total bytes sent: {} MB. Terminating FFmpeg process.",
                                                     elapsedTime, totalBytes / 1024 / 1024);
                                             if (process != null && process.isAlive()) {
                                                 process.destroyForcibly();
@@ -163,11 +166,11 @@ public class VideoController {
                                     }
 
                                     long totalTime = (System.currentTimeMillis() - startTime) / 1000;
-                                    log.info("Conversion completed. Total: {} MB in {} seconds",
+                                    log.info(context.map(), "Conversion completed. Total: {} MB in {} seconds",
                                             totalBytes / 1024 / 1024, totalTime);
 
                                 } catch (IOException e) {
-                                    log.warn("Stream interrupted after {} seconds: {}",
+                                    log.warn(context.map(), "Stream interrupted after {} seconds: {}",
                                             (System.currentTimeMillis() - startTime) / 1000, e.getMessage());
                                     if (process != null && process.isAlive()) {
                                         process.destroyForcibly();
@@ -183,24 +186,24 @@ public class VideoController {
                                 }
 
                                 if (exitCode != 0) {
-                                    log.error("FFmpeg process failed with exit code: {} after {} seconds",
+                                    log.error(context.map(), "FFmpeg process failed with exit code: {} after {} seconds",
                                             exitCode, (System.currentTimeMillis() - startTime) / 1000);
                                     return;
                                 }
 
                                 long totalTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.info("FFmpeg conversion completed successfully in {} seconds", totalTime);
+                                log.info(context.map(), "FFmpeg conversion completed successfully in {} seconds", totalTime);
 
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                                 long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.info("Conversion interrupted after {} seconds", elapsedTime);
+                                log.info(context.map(), "Conversion interrupted after {} seconds", elapsedTime);
                                 if (process != null && process.isAlive()) {
                                     process.destroyForcibly();
                                 }
                             } catch (Exception e) {
                                 long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.error("Error during FFmpeg conversion after {} seconds: {}", elapsedTime, e.getMessage());
+                                log.error(context.map(), "Error during FFmpeg conversion after {} seconds: {}", elapsedTime, e.getMessage());
                                 if (process != null && process.isAlive()) {
                                     process.destroyForcibly();
                                 }
@@ -209,7 +212,7 @@ public class VideoController {
                                 if (process != null && process.isAlive()) {
                                     try {
                                         if (!process.destroyForcibly().waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                                            log.warn("FFmpeg process did not terminate within 5 seconds");
+                                            log.warn(context.map(), "FFmpeg process did not terminate within 5 seconds");
                                         }
                                     } catch (InterruptedException e) {
                                         Thread.currentThread().interrupt();
@@ -229,7 +232,7 @@ public class VideoController {
                                 .body(stream);
 
                     } catch (Exception e) {
-                        log.error("Error in downloadAndConvert", e);
+                        log.error(context.map(), "Error in downloadAndConvert", e);
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
                     }
                 }
@@ -237,7 +240,7 @@ public class VideoController {
 
         // Optional: Add timeout handler
         webAsyncTask.onTimeout(() -> {
-            log.warn("Video conversion timed out after 30 minutes");
+            log.warn(context.map(), "Video conversion timed out after 30 minutes");
             return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
                     .build();
         });
@@ -245,25 +248,25 @@ public class VideoController {
         return webAsyncTask;
     }
 
-    private Path findMainM3u8File(Path hlsBaseDir) {
+    private Path findMainM3u8File(Path hlsBaseDir, BaseProcessContext context) {
         try {
             // Look for the main playlist file
             List<Path> m3u8Files = Files.walk(hlsBaseDir)
                     .filter(path -> path.toString().toLowerCase().endsWith(".m3u8"))
                     .collect(Collectors.toList());
 
-            log.info("Found " + m3u8Files.size() + " m3u8 files: " + m3u8Files);
+            log.info(context.map(), "Found " + m3u8Files.size() + " m3u8 files: " + m3u8Files);
 
             // Try to find master playlist first
             for (Path m3u8File : m3u8Files) {
                 try {
                     String content = Files.readString(m3u8File);
                     if (content.contains("#EXT-X-STREAM-INF")) {
-                        log.info("Found master playlist: " + m3u8File);
+                        log.info(context.map(), "Found master playlist: " + m3u8File);
                         return m3u8File;
                     }
                 } catch (IOException e) {
-                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                    log.warn(context.map(), "Could not read m3u8 file: " + m3u8File, e);
                 }
             }
 
@@ -272,23 +275,23 @@ public class VideoController {
                 try {
                     String content = Files.readString(m3u8File);
                     if (content.contains("#EXTINF")) {
-                        log.info("Found media playlist: " + m3u8File);
+                        log.info(context.map(), "Found media playlist: " + m3u8File);
                         return m3u8File;
                     }
                 } catch (IOException e) {
-                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                    log.warn(context.map(), "Could not read m3u8 file: " + m3u8File, e);
                 }
             }
 
             // Fallback to first m3u8 file found
             if (!m3u8Files.isEmpty()) {
-                log.info("Using first m3u8 file found: " + m3u8Files.get(0));
+                log.info(context.map(), "Using first m3u8 file found: " + m3u8Files.get(0));
                 return m3u8Files.get(0);
             }
 
             return null;
         } catch (IOException e) {
-            log.error("Error searching for m3u8 file", e);
+            log.error(context.map(), "Error searching for m3u8 file", e);
             return null;
         }
     }
