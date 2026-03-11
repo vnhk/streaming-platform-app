@@ -81,58 +81,69 @@ public class VideoController {
                             long startTime = System.currentTimeMillis();
 
                             try {
+                                // Before running FFmpeg, check playlist content
+                                try {
+                                    String playlistContent = Files.readString(mainM3u8);
+                                    log.info("Using playlist content preview: " +
+                                            playlistContent.lines().limit(10).collect(Collectors.joining("\n")));
+
+                                    int segmentCount = (int) playlistContent.lines()
+                                            .filter(line -> line.contains("#EXTINF"))
+                                            .count();
+                                    log.info("Playlist contains {} segments", segmentCount);
+                                } catch (Exception e) {
+                                    log.warn("Could not read playlist for debugging: " + e.getMessage());
+                                }
+
                                 ProcessBuilder processBuilder = new ProcessBuilder();
                                 processBuilder.command(
                                         "ffmpeg",
-                                        "-y",  // Overwrite output without asking
+                                        "-y",
+                                        "-protocol_whitelist", "file,http,https,tcp,tls,crypto", // Important for HLS
                                         "-i", mainM3u8.toString(),
-                                        "-c:v", "libx264",  // Re-encode video to ensure compatibility
-                                        "-c:a", "aac",      // Re-encode audio to AAC
-                                        "-preset", "fast",   // Fast encoding preset
-                                        "-crf", "23",        // Constant Rate Factor for quality
-                                        "-movflags", "frag_keyframe+empty_moov+faststart",  // Enable streaming and fast start
+                                        "-c:v", "libx264",
+                                        "-c:a", "aac",
+                                        "-preset", "fast",
+                                        "-crf", "23",
+                                        "-movflags", "frag_keyframe+empty_moov+faststart",
                                         "-f", "mp4",
-                                        "-progress", "pipe:2",  // Send progress to stderr
-                                        "pipe:1"  // Output to stdout
+                                        "-v", "info", // More logs from FFmpeg
+                                        "pipe:1"
                                 );
 
-                                // Set working directory to the HLS directory
                                 processBuilder.directory(hlsBaseDir.toFile());
                                 processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
 
                                 process = processBuilder.start();
                                 final Process finalProcess = process;
 
-                                // Create a thread to read and log stderr with progress tracking
                                 errorReaderThread = new Thread(() -> {
                                     try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
                                         String line;
-                                        long lastProgressTime = System.currentTimeMillis();
-
                                         while ((line = errorReader.readLine()) != null) {
-                                            long currentTime = System.currentTimeMillis();
-
-                                            // Log progress every 30 seconds instead of every line
-                                            if (line.contains("frame=") && (currentTime - lastProgressTime) > 30000) {
-                                                log.debug(context.map(), "FFmpeg progress: " + line);
-                                                lastProgressTime = currentTime;
-                                            } else if (line.contains("Error") || line.contains("error") || line.contains("Warning")) {
-                                                log.warn(context.map(), "FFmpeg: " + line);
+                                            // Log everything from FFmpeg to see what's happening
+                                            if (line.contains("frame=") || line.contains("time=")) {
+                                                log.info("FFmpeg progress: " + line);
+                                            } else if (line.contains("Input") || line.contains("Output") || line.contains("Stream mapping")) {
+                                                log.info("FFmpeg info: " + line);
+                                            } else if (line.contains("Error") || line.contains("error") || line.contains("Failed")) {
+                                                log.error("FFmpeg error: " + line);
+                                            } else {
+                                                log.debug("FFmpeg: " + line);
                                             }
                                         }
                                     } catch (IOException e) {
-                                        log.debug(context.map(), "Error reading FFmpeg stderr (likely process terminated): " + e.getMessage());
+                                        log.debug("Error reading FFmpeg stderr: " + e.getMessage());
                                     }
                                 });
-                                errorReaderThread.setDaemon(true); // Make it a daemon thread
+                                errorReaderThread.setDaemon(true);
                                 errorReaderThread.start();
 
-                                // Stream the output directly to the response
                                 try (var processOutput = process.getInputStream()) {
-                                    byte[] buffer = new byte[65536];  // 64KB buffer for better performance
+                                    byte[] buffer = new byte[32768]; // Back to larger buffer
                                     int bytesRead;
                                     long totalBytes = 0;
-                                    long lastHeartbeat = System.currentTimeMillis();
+                                    long lastLogTime = System.currentTimeMillis();
 
                                     while ((bytesRead = processOutput.read(buffer)) != -1) {
                                         try {
@@ -140,24 +151,23 @@ public class VideoController {
                                             totalBytes += bytesRead;
 
                                             long currentTime = System.currentTimeMillis();
-
-                                            // Flush every 1MB or every 10 seconds
-                                            if (totalBytes % (1024 * 1024) == 0 || (currentTime - lastHeartbeat) > 10000) {
+                                            // Flush every second or every 1MB
+                                            if ((currentTime - lastLogTime) > 1000 || totalBytes % (1024 * 1024) == 0) {
                                                 outputStream.flush();
-                                                lastHeartbeat = currentTime;
+                                                lastLogTime = currentTime;
 
-                                                // Log progress every 100MB
-                                                if (totalBytes % (100 * 1024 * 1024) == 0) {
+                                                // Log every 5MB
+                                                if (totalBytes % (5 * 1024 * 1024) == 0) {
                                                     long elapsedSeconds = (currentTime - startTime) / 1000;
-                                                    log.info(context.map(), "Streamed " + (totalBytes / 1024 / 1024) + " MB in " + elapsedSeconds + " seconds");
+                                                    log.info("Streamed {} MB in {} seconds", totalBytes / 1024 / 1024, elapsedSeconds);
                                                 }
                                             }
 
                                         } catch (IOException e) {
-                                            // Client disconnected or connection lost
                                             long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                            log.info(context.map(), "Client disconnected after {} seconds. Total bytes sent: {} MB. Terminating FFmpeg process.",
+                                            log.info("Client disconnected after {} seconds. Total bytes sent: {} MB",
                                                     elapsedTime, totalBytes / 1024 / 1024);
+
                                             if (process != null && process.isAlive()) {
                                                 process.destroyForcibly();
                                             }
@@ -165,62 +175,23 @@ public class VideoController {
                                         }
                                     }
 
+                                    int exitCode = process.waitFor();
                                     long totalTime = (System.currentTimeMillis() - startTime) / 1000;
-                                    log.info(context.map(), "Conversion completed. Total: {} MB in {} seconds",
-                                            totalBytes / 1024 / 1024, totalTime);
+
+                                    log.info("FFmpeg finished with exit code: {}. Total: {} MB in {} seconds",
+                                            exitCode, totalBytes / 1024 / 1024, totalTime);
 
                                 } catch (IOException e) {
-                                    log.warn(context.map(), "Stream interrupted after {} seconds: {}",
-                                            (System.currentTimeMillis() - startTime) / 1000, e.getMessage());
+                                    log.error("Stream error: {}", e.getMessage());
                                     if (process != null && process.isAlive()) {
                                         process.destroyForcibly();
                                     }
-                                    return;
                                 }
 
-                                // Wait for process to complete
-                                int exitCode = process.waitFor();
-
-                                if (errorReaderThread != null && errorReaderThread.isAlive()) {
-                                    errorReaderThread.join(2000);
-                                }
-
-                                if (exitCode != 0) {
-                                    log.error(context.map(), "FFmpeg process failed with exit code: {} after {} seconds",
-                                            exitCode, (System.currentTimeMillis() - startTime) / 1000);
-                                    return;
-                                }
-
-                                long totalTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.info(context.map(), "FFmpeg conversion completed successfully in {} seconds", totalTime);
-
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.info(context.map(), "Conversion interrupted after {} seconds", elapsedTime);
-                                if (process != null && process.isAlive()) {
-                                    process.destroyForcibly();
-                                }
                             } catch (Exception e) {
-                                long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                log.error(context.map(), "Error during FFmpeg conversion after {} seconds: {}", elapsedTime, e.getMessage());
+                                log.error("Conversion error: {}", e.getMessage());
                                 if (process != null && process.isAlive()) {
                                     process.destroyForcibly();
-                                }
-                            } finally {
-                                // Cleanup
-                                if (process != null && process.isAlive()) {
-                                    try {
-                                        if (!process.destroyForcibly().waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                                            log.warn(context.map(), "FFmpeg process did not terminate within 5 seconds");
-                                        }
-                                    } catch (InterruptedException e) {
-                                        Thread.currentThread().interrupt();
-                                    }
-                                }
-
-                                if (errorReaderThread != null && errorReaderThread.isAlive()) {
-                                    errorReaderThread.interrupt();
                                 }
                             }
                         };
@@ -519,6 +490,84 @@ public class VideoController {
         } catch (Exception e) {
             log.error("Error! ", e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    private Path findMainM3u8File(Path hlsBaseDir) {
+        try {
+            List<Path> m3u8Files = Files.walk(hlsBaseDir)
+                    .filter(path -> path.toString().toLowerCase().endsWith(".m3u8"))
+                    .collect(Collectors.toList());
+
+            log.info("Found " + m3u8Files.size() + " m3u8 files: " + m3u8Files);
+
+            // First check for master playlist
+            for (Path m3u8File : m3u8Files) {
+                try {
+                    String content = Files.readString(m3u8File);
+                    if (content.contains("#EXT-X-STREAM-INF")) {
+                        log.info("Found master playlist: " + m3u8File);
+
+                        // IMPORTANT: Check if master playlist has correct paths to video playlist
+                        String[] lines = content.split("\n");
+                        for (String line : lines) {
+                            if (!line.startsWith("#") && line.trim().length() > 0) {
+                                Path videoPlaylist = m3u8File.getParent().resolve(line.trim());
+                                if (Files.exists(videoPlaylist)) {
+                                    log.info("Master playlist points to existing video playlist: " + videoPlaylist);
+                                    // Return video playlist directly instead of master
+                                    return videoPlaylist;
+                                } else {
+                                    log.warn("Master playlist points to non-existing file: " + videoPlaylist);
+                                }
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                }
+            }
+
+            // If no good master found, find largest video playlist
+            Path bestVideoPlaylist = null;
+            int maxSegments = 0;
+
+            for (Path m3u8File : m3u8Files) {
+                try {
+                    String content = Files.readString(m3u8File);
+                    if (content.contains("#EXTINF")) {
+                        // Count segments
+                        int segmentCount = (int) content.lines()
+                                .filter(line -> line.contains("#EXTINF"))
+                                .count();
+
+                        log.info("Video playlist {} has {} segments", m3u8File, segmentCount);
+
+                        if (segmentCount > maxSegments) {
+                            maxSegments = segmentCount;
+                            bestVideoPlaylist = m3u8File;
+                        }
+                    }
+                } catch (IOException e) {
+                    log.warn("Could not read m3u8 file: " + m3u8File, e);
+                }
+            }
+
+            if (bestVideoPlaylist != null) {
+                log.info("Using video playlist with most segments ({}): {}", maxSegments, bestVideoPlaylist);
+                return bestVideoPlaylist;
+            }
+
+            // Fallback
+            if (!m3u8Files.isEmpty()) {
+                log.warn("Using first m3u8 file found as fallback: " + m3u8Files.get(0));
+                return m3u8Files.get(0);
+            }
+
+            return null;
+        } catch (IOException e) {
+            log.error("Error searching for m3u8 file", e);
+            return null;
         }
     }
 }
