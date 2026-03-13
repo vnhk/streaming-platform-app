@@ -103,6 +103,7 @@ public class VideoController {
                                         "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
                                         "-i", mainM3u8.toString(),
                                         "-c", "copy",
+                                        "-bsf:a", "aac_adtstoasc",
                                         "-movflags", "frag_keyframe+empty_moov",
                                         "-f", "mp4",
                                         "-v", "info",
