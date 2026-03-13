@@ -105,7 +105,7 @@ public class VideoController {
                                         "-c:a", "aac",
                                         "-preset", "fast",
                                         "-crf", "23",
-                                        "-movflags", "frag_keyframe+empty_moov+faststart",
+                                        "-movflags", "frag_keyframe+empty_moov",
                                         "-f", "mp4",
                                         "-v", "info", // More logs from FFmpeg
                                         "pipe:1"
