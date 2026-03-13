@@ -99,15 +99,13 @@ public class VideoController {
                                 processBuilder.command(
                                         "ffmpeg",
                                         "-y",
-                                        "-protocol_whitelist", "file,http,https,tcp,tls,crypto", // Important for HLS
+                                        "-allowed_extensions", "ALL",
+                                        "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
                                         "-i", mainM3u8.toString(),
-                                        "-c:v", "libx264",
-                                        "-c:a", "aac",
-                                        "-preset", "fast",
-                                        "-crf", "23",
+                                        "-c", "copy",
                                         "-movflags", "frag_keyframe+empty_moov",
                                         "-f", "mp4",
-                                        "-v", "info", // More logs from FFmpeg
+                                        "-v", "info",
                                         "pipe:1"
                                 );
 
