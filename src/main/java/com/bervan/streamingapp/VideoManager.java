@@ -333,11 +333,102 @@ public class VideoManager {
         watchDetailsRepository.save(watchDetails);
     }
 
-    public void saveSubtitleDelays(WatchDetails watchDetails, double enDelay, double plDelay) {
+    public void saveSubtitleDelays(WatchDetails watchDetails, double enDelay, double plDelay, double esDelay) {
         watchDetails.setSubtitleDelayEN(enDelay);
         watchDetails.setSubtitleDelayPL(plDelay);
-
+        watchDetails.setSubtitleDelayES(esDelay);
         watchDetailsRepository.save(watchDetails);
+    }
+
+    public Optional<Metadata> findSubtitle(Metadata videoFolder, String language) {
+        try {
+            String folderPath = videoFolder.getPath() + videoFolder.getFilename() + File.separator;
+            MetadataByPathAndType contents = loadVideoDirectoryContent(videoFolder);
+            Map<ProductionFileType, List<Metadata>> typeMap = contents.get(folderPath);
+            if (typeMap == null) return Optional.empty();
+            List<Metadata> subtitleList = typeMap.get(ProductionFileType.SUBTITLE);
+            if (subtitleList == null) return Optional.empty();
+            return getSubtitle(language, subtitleList);
+        } catch (Exception e) {
+            log.error("Could not find subtitle for language={}", language, e);
+            return Optional.empty();
+        }
+    }
+
+    public void applySubtitleDelayPermanently(Metadata subtitle, double delaySeconds) throws IOException {
+        Path filePath = Paths.get(getSrc(subtitle));
+        String filename = subtitle.getFilename();
+        Path originalBackup = filePath.getParent().resolve(filename + ".ORIGINAL");
+
+        if (!Files.exists(originalBackup)) {
+            Files.copy(filePath, originalBackup);
+            log.info("Created original backup: {}", originalBackup);
+        }
+
+        String content = readSubtitleContent(filePath);
+        String modified = filename.endsWith(".srt")
+                ? applyDelayToSrt(content, delaySeconds)
+                : applyDelayToVtt(content, delaySeconds);
+
+        Files.writeString(filePath, modified, StandardCharsets.UTF_8);
+        log.info("Applied permanent subtitle delay of {}s to {}", delaySeconds, filePath);
+    }
+
+    private String readSubtitleContent(Path path) throws IOException {
+        try {
+            return Files.readString(path);
+        } catch (Exception e) {
+            try {
+                return Files.readString(path, StandardCharsets.UTF_8);
+            } catch (Exception e1) {
+                return Files.readString(path, StandardCharsets.ISO_8859_1);
+            }
+        }
+    }
+
+    private String applyDelayToSrt(String content, double delaySeconds) {
+        long delayMs = Math.round(delaySeconds * 1000);
+        Pattern pattern = Pattern.compile("(\\d{2}:\\d{2}:\\d{2},\\d{3}) --> (\\d{2}:\\d{2}:\\d{2},\\d{3})");
+        Matcher matcher = pattern.matcher(content);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String start = shiftTimestamp(matcher.group(1), delayMs, ',');
+            String end = shiftTimestamp(matcher.group(2), delayMs, ',');
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(start + " --> " + end));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String applyDelayToVtt(String content, double delaySeconds) {
+        long delayMs = Math.round(delaySeconds * 1000);
+        Pattern pattern = Pattern.compile("(\\d{2}:\\d{2}:\\d{2}\\.\\d{3}) --> (\\d{2}:\\d{2}:\\d{2}\\.\\d{3})");
+        Matcher matcher = pattern.matcher(content);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String start = shiftTimestamp(matcher.group(1), delayMs, '.');
+            String end = shiftTimestamp(matcher.group(2), delayMs, '.');
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(start + " --> " + end));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String shiftTimestamp(String timestamp, long delayMs, char separator) {
+        int c1 = timestamp.indexOf(':');
+        int c2 = timestamp.indexOf(':', c1 + 1);
+        int sepIdx = timestamp.indexOf(separator);
+        long hours = Long.parseLong(timestamp.substring(0, c1));
+        long minutes = Long.parseLong(timestamp.substring(c1 + 1, c2));
+        long seconds = Long.parseLong(timestamp.substring(c2 + 1, sepIdx));
+        long ms = Long.parseLong(timestamp.substring(sepIdx + 1));
+        long total = hours * 3600000L + minutes * 60000L + seconds * 1000L + ms + delayMs;
+        if (total < 0) total = 0;
+        long h = total / 3600000; total %= 3600000;
+        long m = total / 60000;   total %= 60000;
+        long s = total / 1000;
+        long millis = total % 1000;
+        return String.format("%02d:%02d:%02d%c%03d", h, m, s, separator, millis);
     }
 
     @NotNull

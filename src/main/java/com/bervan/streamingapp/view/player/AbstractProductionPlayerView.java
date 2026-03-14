@@ -10,18 +10,24 @@ import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.view.AbstractProductionDetailsView;
 import com.bervan.streamingapp.view.AbstractRemoteControlSupportedView;
 import com.vaadin.flow.component.ClientCallable;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dependency.JavaScript;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.NotFoundException;
 import com.vaadin.flow.router.RouteParameters;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -227,7 +233,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         );
     }
 
-    private SubtitleControlPanel createSubtitleControls(WatchDetails watchDetails) {
+    private SubtitleControlPanel createSubtitleControls(WatchDetails watchDetails, Metadata videoFolder) {
         SubtitleControlPanel panel = new SubtitleControlPanel(
                 watchDetails.getSubtitleDelayEN(),
                 watchDetails.getSubtitleDelayPL(),
@@ -236,20 +242,55 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
 
         panel.setEnDelayChangeListener(delay -> {
             videoPlayer.shiftSubtitles("en", delay);
-            saveSubtitleDelays(delay, panel.getPlDelay());
+            saveSubtitleDelays(delay, panel.getPlDelay(), panel.getEsDelay());
         });
 
         panel.setPlDelayChangeListener(delay -> {
             videoPlayer.shiftSubtitles("pl", delay);
-            saveSubtitleDelays(panel.getEnDelay(), delay);
+            saveSubtitleDelays(panel.getEnDelay(), delay, panel.getEsDelay());
         });
 
         panel.setEsDelayChangeListener(delay -> {
-            videoPlayer.shiftSubtitles("pl", delay);
-            saveSubtitleDelays(panel.getEnDelay(), delay);
+            videoPlayer.shiftSubtitles("es", delay);
+            saveSubtitleDelays(panel.getEnDelay(), panel.getPlDelay(), delay);
         });
 
+        videoManager.findSubtitle(videoFolder, VideoManager.EN).ifPresent(sub ->
+                panel.setEnSavePermanentlyListener(() -> savePermanently(sub, panel.getEnDelay()))
+        );
+        videoManager.findSubtitle(videoFolder, VideoManager.PL).ifPresent(sub ->
+                panel.setPlSavePermanentlyListener(() -> savePermanently(sub, panel.getPlDelay()))
+        );
+        videoManager.findSubtitle(videoFolder, VideoManager.ES).ifPresent(sub ->
+                panel.setEsSavePermanentlyListener(() -> savePermanently(sub, panel.getEsDelay()))
+        );
+
         return panel;
+    }
+
+    private void savePermanently(Metadata subtitle, double delay) {
+        try {
+            videoManager.applySubtitleDelayPermanently(subtitle, delay);
+            showPrimaryNotification("Subtitle delay saved permanently to file.");
+        } catch (IOException e) {
+            log.error("Failed to save subtitle delay permanently", e);
+            showErrorNotification("Failed to save subtitle delay permanently.");
+        }
+    }
+
+    private Component buildOptionsTab(SubtitleControlPanel subtitleControls) {
+        Tab optionsTab = new Tab("Options");
+        Tabs tabs = new Tabs(optionsTab);
+        tabs.setWidthFull();
+
+        Div content = new Div(subtitleControls);
+        content.setWidthFull();
+
+        VerticalLayout section = new VerticalLayout(tabs, content);
+        section.setSpacing(false);
+        section.setPadding(false);
+        section.setWidthFull();
+        return section;
     }
 
     private void setupKeyboardShortcuts() {
@@ -334,9 +375,9 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         return Math.abs(currentTime - lastSavedTime) >= MIN_TIME_CHANGE_TO_SAVE;
     }
 
-    private void saveSubtitleDelays(double enDelay, double plDelay) {
+    private void saveSubtitleDelays(double enDelay, double plDelay, double esDelay) {
         WatchDetails watchDetails = loadWatchDetails(currentVideoFolderId);
-        videoManager.saveSubtitleDelays(watchDetails, enDelay, plDelay);
+        videoManager.saveSubtitleDelays(watchDetails, enDelay, plDelay, esDelay);
     }
 
     private void cleanupResources() {
@@ -371,14 +412,14 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.MP4) {
             videoPlayer = createMp4VideoPlayer(watchDetails, productionData, availableSubtitles);
             add(videoPlayer);
-            SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
-            add(subtitleControls);
+            SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails, video);
+            add(buildOptionsTab(subtitleControls));
         } else {
             videoPlayer = createHlsVideoPlayer(watchDetails, productionData, availableSubtitles);
             add(videoPlayer);
             if (!availableSubtitles.isEmpty()) {
-                SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails);
-                add(subtitleControls);
+                SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails, video);
+                add(buildOptionsTab(subtitleControls));
             }
         }
 
