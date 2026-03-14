@@ -152,7 +152,7 @@ public class VideoManager {
         videoMetadata = videoParentFolder.get();
         String filename = videoMetadata.getFilename();
 
-        String pattern = "(?:Ep(?:isode)?\\s?)(\\d+)";
+        String pattern = "(?:Ep(?:isode)?\\s?|S\\d+E)(\\d+)";
         Pattern regex = Pattern.compile(pattern);
 
         int episodeNumber;
@@ -175,7 +175,7 @@ public class VideoManager {
         videoMetadata = videoParentFolder.get();
         String filename = videoMetadata.getFilename();
 
-        String pattern = "(?:Ep(?:isode)?\\s?)(\\d+)";
+        String pattern = "(?:Ep(?:isode)?\\s?|S\\d+E)(\\d+)";
         Pattern regex = Pattern.compile(pattern);
 
         int episodeNumber;
@@ -639,7 +639,8 @@ public class VideoManager {
         int maxEpisodes = episodes.size();
 
         for (int i = 1; i <= maxEpisodes; i++) {
-            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
+            // Matches: Episode1, Ep1, Ep 1  OR  S1E1, S01E01, S1E10 etc.
+            String pattern = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
             for (EpisodeStructure episode : episodes) {
                 Matcher matcher = regex.matcher(episode.getMetadataName());
