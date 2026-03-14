@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -95,20 +97,64 @@ public class VideoController {
                                     log.warn("Could not read playlist for debugging: " + e.getMessage());
                                 }
 
-                                ProcessBuilder processBuilder = new ProcessBuilder();
-                                processBuilder.command(
-                                        "ffmpeg",
-                                        "-y",
+                                // Collect subtitle inputs: language code -> file path
+                                // LinkedHashMap preserves insertion order for stream index tracking
+                                Map<String, String> subtitleLangToIso = new LinkedHashMap<>();
+                                subtitleLangToIso.put(VideoManager.EN, "eng");
+                                subtitleLangToIso.put(VideoManager.PL, "pol");
+                                subtitleLangToIso.put(VideoManager.ES, "spa");
+
+                                Map<String, String> foundSubtitles = new LinkedHashMap<>();
+                                for (Map.Entry<String, String> entry : subtitleLangToIso.entrySet()) {
+                                    videoManager.findSubtitle(videoFolderSingle, entry.getKey())
+                                            .ifPresent(sub -> foundSubtitles.put(entry.getValue(), videoManager.getSrc(sub)));
+                                }
+                                log.info(context.map(), "Found subtitles for download: " + foundSubtitles.keySet());
+
+                                List<String> command = new ArrayList<>();
+                                command.addAll(List.of("ffmpeg", "-y",
                                         "-allowed_extensions", "ALL",
                                         "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
-                                        "-i", mainM3u8.toString(),
-                                        "-c", "copy",
-                                        "-bsf:a", "aac_adtstoasc",
+                                        "-i", mainM3u8.toString()));
+
+                                // Add subtitle inputs
+                                for (String subtitlePath : foundSubtitles.values()) {
+                                    command.addAll(List.of("-i", subtitlePath));
+                                }
+
+                                // Stream mapping: all HLS streams + each subtitle input
+                                if (!foundSubtitles.isEmpty()) {
+                                    command.addAll(List.of("-map", "0"));
+                                    int inputIdx = 1;
+                                    for (String ignored : foundSubtitles.values()) {
+                                        command.addAll(List.of("-map", String.valueOf(inputIdx++)));
+                                    }
+                                }
+
+                                command.addAll(List.of(
+                                        "-c:v", "copy",
+                                        "-c:a", "copy",
+                                        "-bsf:a", "aac_adtstoasc"));
+
+                                if (!foundSubtitles.isEmpty()) {
+                                    command.addAll(List.of("-c:s", "mov_text"));
+                                    int subStreamIdx = 0;
+                                    for (String isoLang : foundSubtitles.keySet()) {
+                                        command.addAll(List.of(
+                                                "-metadata:s:s:" + subStreamIdx, "language=" + isoLang,
+                                                "-metadata:s:s:" + subStreamIdx, "title=" + isoLang));
+                                        subStreamIdx++;
+                                    }
+                                }
+
+                                command.addAll(List.of(
                                         "-movflags", "frag_keyframe+empty_moov",
                                         "-f", "mp4",
                                         "-v", "info",
-                                        "pipe:1"
-                                );
+                                        "pipe:1"));
+
+                                ProcessBuilder processBuilder = new ProcessBuilder();
+                                processBuilder.command(command);
 
                                 processBuilder.directory(hlsBaseDir.toFile());
                                 processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
