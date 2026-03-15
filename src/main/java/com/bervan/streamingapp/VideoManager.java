@@ -641,6 +641,7 @@ public class VideoManager {
         for (int i = 1; i <= maxEpisodes; i++) {
             // Matches: Episode1, Ep1, Ep 1  OR  S1E1, S01E01, S1E10 etc.
             String pattern = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + i + "(?![0-9a-zA-Z])";
+
             Pattern regex = Pattern.compile(pattern);
             for (EpisodeStructure episode : episodes) {
                 Matcher matcher = regex.matcher(episode.getMetadataName());

@@ -14,7 +14,10 @@ import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Image;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -268,7 +271,7 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
 
         List<EpisodeStructure> sortedEpisodesFolders = new ArrayList<>();
         for (int i = 1; i <= episodes; i++) {
-            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
+            String pattern = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
             for (EpisodeStructure episodeStructure : seasonStructure.getEpisodes()) {
                 Matcher matcher = regex.matcher(episodeStructure.getMetadataName());

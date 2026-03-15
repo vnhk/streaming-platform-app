@@ -991,7 +991,7 @@ public abstract class AbstractRemoteControlView extends AbstractStreamingPage im
         int maxEpisodes = episodes.size();
 
         for (int i = 1; i <= maxEpisodes; i++) {
-            String pattern = "(?:Ep(?:isode)?\\s?)" + i + "(?![0-9a-zA-Z])";
+            String pattern = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + i + "(?![0-9a-zA-Z])";
             Pattern regex = Pattern.compile(pattern);
             for (EpisodeStructure episode : episodes) {
                 Matcher matcher = regex.matcher(episode.getMetadataName());
