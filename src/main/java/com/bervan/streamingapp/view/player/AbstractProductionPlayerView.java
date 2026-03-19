@@ -298,10 +298,14 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         getElement().executeJs(
                 "var vid = $0;" +
                         "var seekStep = $1;" +
-                        "if(window._playerKeyHandler) { document.removeEventListener('keydown', window._playerKeyHandler); }" +
+                        "if(window._playerKeyHandler) { document.removeEventListener('keydown', window._playerKeyHandler, true); }" +
                         "window._playerKeyHandler = function(e) {" +
                         "  var video = document.getElementById(vid);" +
-                        "  if(!video) return;" +
+                        "  if(!video || !document.contains(video)) {" +
+                        "    document.removeEventListener('keydown', window._playerKeyHandler, true);" +
+                        "    window._playerKeyHandler = null;" +
+                        "    return;" +
+                        "  }" +
                         "  var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';" +
                         "  if(tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;" +
                         "  switch(e.code) {" +
@@ -389,7 +393,10 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
                         "if (window._playerKeyHandler) {" +
                         "  document.removeEventListener('keydown', window._playerKeyHandler, true);" +
                         "  window._playerKeyHandler = null;" +
-                        "}"
+                        "}" +
+                        "var vid = document.getElementById($0);" +
+                        "if (vid) { vid.pause(); }",
+                videoPlayer != null ? videoPlayer.getPlayerUniqueId() : ""
         );
     }
 
