@@ -439,8 +439,6 @@ public class VideoManager {
             SearchRequest searchRequest = new SearchRequest();
             searchRequest.addCriterion("G1", Metadata.class, "path",
                     SearchOperation.EQUALS_OPERATION, parentFolder.getPath() + File.separator + parentFolder.getFilename());
-            searchRequest.addCriterion("G1", Metadata.class, "filename",
-                    SearchOperation.IN_OPERATION, List.of("Ep" + episodeNumber, "Ep " + episodeNumber, "Episode" + episodeNumber, "Episode " + episodeNumber));
             searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
                     SearchOperation.EQUALS_OPERATION, true);
 
@@ -448,14 +446,20 @@ public class VideoManager {
             options.setSortField("filename");
 
             SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-            if (response.getAllFound() == 1) {
-                Metadata directory = response.getResultList().get(0);
-                List<Metadata> video = loadVideoDirectoryContent(directory).get(directory.getPath() + directory.getFilename() + File.separator).get("VIDEO");
-                if (video.size() == 1) {
+
+            String patternStr = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + episodeNumber + "(?![0-9a-zA-Z])";
+            Pattern regex = Pattern.compile(patternStr);
+
+            Optional<Metadata> directory = response.getResultList().stream()
+                    .filter(m -> regex.matcher(m.getFilename()).find())
+                    .findFirst();
+
+            if (directory.isPresent()) {
+                Metadata dir = directory.get();
+                List<Metadata> video = loadVideoDirectoryContent(dir).get(dir.getPath() + dir.getFilename() + File.separator).get("VIDEO");
+                if (video != null && video.size() == 1) {
                     return Optional.ofNullable(video.get(0));
                 }
-            } else {
-                return Optional.empty();
             }
         }
 
