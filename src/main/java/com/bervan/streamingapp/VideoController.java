@@ -15,7 +15,6 @@ import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.security.util.InMemoryResource;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.async.WebAsyncTask;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.BufferedReader;
@@ -44,40 +43,33 @@ public class VideoController {
     }
 
     @GetMapping("/download-and-convert/{videoFolderId}")
-    public WebAsyncTask<ResponseEntity<StreamingResponseBody>> downloadAndConvert(@PathVariable String videoFolderId) {
+    public ResponseEntity<StreamingResponseBody> downloadAndConvert(@PathVariable String videoFolderId) {
         BaseProcessContext context = BaseProcessContext.builder()
                 .processName("download-and-convert").build();
-        // Create WebAsyncTask with 30-minute timeout only for this endpoint
-        WebAsyncTask<ResponseEntity<StreamingResponseBody>> webAsyncTask = new WebAsyncTask<>(
-                30 * 60 * 1000L, // 30 minutes timeout
-                () -> {
-                    try {
-                        // Security check
-                        if (AuthService.getLoggedUserId() == null) {
-                            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-                        }
 
-                        // Load video metadata
-                        List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
-                        if (videoFolder.size() != 1) {
-                            log.error(context.map(), "Could not find file based on provided id: " + videoFolderId);
-                            return ResponseEntity.badRequest().build();
-                        }
+        if (AuthService.getLoggedUserId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-                        Metadata videoFolderSingle = videoFolder.get(0);
-                        Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
+        List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
+        if (videoFolder.size() != 1) {
+            log.error(context.map(), "Could not find file based on provided id: " + videoFolderId);
+            return ResponseEntity.badRequest().build();
+        }
 
-                        // Find the main m3u8 file
-                        Path mainM3u8 = findMainM3u8File(hlsBaseDir, context);
-                        if (mainM3u8 == null || !Files.exists(mainM3u8)) {
-                            log.error(context.map(), "Could not find main m3u8 file in directory: " + hlsBaseDir);
-                            return ResponseEntity.badRequest().build();
-                        }
+        Metadata videoFolderSingle = videoFolder.get(0);
+        Path hlsBaseDir = Path.of(videoManager.getSrc(videoFolderSingle));
 
-                        log.info(context.map(), "Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
-                        String outputFilename = videoFolderSingle.getFilename() + ".mp4";
+        Path mainM3u8 = findMainM3u8File(hlsBaseDir, context);
+        if (mainM3u8 == null || !Files.exists(mainM3u8)) {
+            log.error(context.map(), "Could not find main m3u8 file in directory: " + hlsBaseDir);
+            return ResponseEntity.badRequest().build();
+        }
 
-                        StreamingResponseBody stream = outputStream -> {
+        log.info(context.map(), "Starting conversion of HLS to MP4. Input: " + mainM3u8.toString());
+        String outputFilename = videoFolderSingle.getFilename() + ".mp4";
+
+        StreamingResponseBody stream = outputStream -> {
                             Process process = null;
                             Thread errorReaderThread = null;
                             long startTime = System.currentTimeMillis();
@@ -241,27 +233,11 @@ public class VideoController {
                             }
                         };
 
-                        return ResponseEntity.ok()
-                                .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
-                                .header("Content-Type", "video/mp4")
-                                .header("Cache-Control", "no-cache")
-                                .body(stream);
-
-                    } catch (Exception e) {
-                        log.error(context.map(), "Error in downloadAndConvert", e);
-                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-                    }
-                }
-        );
-
-        // Optional: Add timeout handler
-        webAsyncTask.onTimeout(() -> {
-            log.warn(context.map(), "Video conversion timed out after 30 minutes");
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .build();
-        });
-
-        return webAsyncTask;
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
+                .header("Content-Type", "video/mp4")
+                .header("Cache-Control", "no-cache")
+                .body(stream);
     }
 
     private Path findMainM3u8File(Path hlsBaseDir, BaseProcessContext context) {
