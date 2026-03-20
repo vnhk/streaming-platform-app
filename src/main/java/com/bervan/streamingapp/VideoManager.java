@@ -115,6 +115,22 @@ public class VideoManager {
         return Optional.of(subtitlesFound.get(0));
     }
 
+    public Optional<String> detectSubtitleLanguage(String filename) {
+        String lower = filename.toLowerCase();
+        for (Map.Entry<String, List<String>> entry : subtitlesParts.entrySet()) {
+            for (String alias : entry.getValue()) {
+                for (String sep1 : subtitleSeparator) {
+                    for (String sep2 : subtitleSeparator) {
+                        if (lower.contains(sep1 + alias + sep2)) {
+                            return Optional.of(entry.getKey());
+                        }
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     public List<Metadata> loadVideosMainDirectories() {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
