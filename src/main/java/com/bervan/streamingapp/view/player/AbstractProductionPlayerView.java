@@ -8,20 +8,23 @@ import com.bervan.streamingapp.WatchDetails;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.view.AbstractProductionDetailsView;
+import com.bervan.streamingapp.view.AbstractProductionListView;
 import com.bervan.streamingapp.view.AbstractRemoteControlSupportedView;
 import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dependency.JavaScript;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.tabs.Tab;
-import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.NotFoundException;
@@ -29,7 +32,6 @@ import com.vaadin.flow.router.RouteParameters;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 @JavaScript("https://cdn.jsdelivr.net/npm/hls.js@latest")
@@ -44,6 +46,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     // UI Components
     protected final HorizontalLayout navigationBar = new HorizontalLayout();
     protected final Map<String, ProductionData> streamingProductionData;
+    private VerticalLayout subtitleSettingsPanel;
 
     // Dependencies
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
@@ -123,49 +126,78 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void buildNavigationBar(Metadata video) {
-        addDetailsButton(video);
+        navigationBar.setAlignItems(FlexComponent.Alignment.CENTER);
+        navigationBar.getStyle()
+                .set("gap", "6px")
+                .set("flex-wrap", "wrap")
+                .set("padding", "6px 4px");
+
+        addHomeButton();
+        addDetailsButton();
+
+        Div spacer = new Div();
+        spacer.getStyle().set("flex", "1");
+        navigationBar.add(spacer);
+
+        addSubtitleSettingsToggle();
         addDownloadButton(video);
         addPreviousButton(video);
         addNextButton(video);
     }
 
-    private void addDetailsButton(Metadata video) {
-        //doesnt work for tv series?
-        findProductionData(video).ifPresent(productionData -> {
-            Button detailsBtn = createStyledButton(productionData.getProductionName() + " - Details");
-            detailsBtn.addClickListener(e -> navigateToDetails(productionData.getProductionId()));
-            navigationBar.add(detailsBtn);
+    private void addSubtitleSettingsToggle() {
+        Button btn = new Button("Subtitle Settings", new Icon(VaadinIcon.LINES_LIST));
+        btn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        btn.addClickListener(e -> {
+            if (subtitleSettingsPanel != null) {
+                subtitleSettingsPanel.setVisible(!subtitleSettingsPanel.isVisible());
+            }
         });
+        navigationBar.add(btn);
+    }
+
+    private void addHomeButton() {
+        Button homeBtn = new Button("Home", new Icon(VaadinIcon.HOME));
+        homeBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        homeBtn.addClickListener(e -> UI.getCurrent().navigate(AbstractProductionListView.ROUTE_NAME));
+        navigationBar.add(homeBtn);
+    }
+
+    private void addDetailsButton() {
+        if (currentProductionData != null) {
+            Button detailsBtn = new Button(currentProductionData.getProductionName(), new Icon(VaadinIcon.ARROW_BACKWARD));
+            detailsBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+            detailsBtn.addClickListener(e -> navigateToDetails(currentProductionData.getProductionId()));
+            navigationBar.add(detailsBtn);
+        }
     }
 
     private void addDownloadButton(Metadata video) {
-        Button download = createStyledButton("Download");
+        Button download = new Button("Download", new Icon(VaadinIcon.DOWNLOAD_ALT));
+        download.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
         download.addClickListener(e -> {
             showPrimaryNotification("Download started. The file will be downloaded shortly.");
-
-            String downloadUrl = "/storage/videos/download-and-convert/" + video.getId();
-
             UI.getCurrent().getPage().executeJs(
                     "window.open($0, '_blank');",
-                    downloadUrl
+                    "/storage/videos/download-and-convert/" + video.getId()
             );
         });
         navigationBar.add(download);
     }
 
     private void addPreviousButton(Metadata video) {
-        // Use cross-season navigation if production data is available
         if (currentProductionData != null) {
             videoManager.getPrevVideoWithCrossSeasonSupport(currentVideoFolderId, currentProductionData)
                     .ifPresent(prevVideo -> {
-                        Button prevBtn = createStyledButton("Previous episode");
+                        Button prevBtn = new Button("Previous", new Icon(VaadinIcon.BACKWARDS));
+                        prevBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
                         prevBtn.addClickListener(e -> navigateToVideo(prevVideo.getId().toString()));
                         navigationBar.add(prevBtn);
                     });
         } else {
-            // Fallback to old method
             videoManager.getPrevVideo(video).ifPresent(prevVideo -> {
-                Button prevBtn = createStyledButton("Previous episode");
+                Button prevBtn = new Button("Previous", new Icon(VaadinIcon.BACKWARDS));
+                prevBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
                 prevBtn.addClickListener(e -> navigateToVideo(prevVideo.getId().toString()));
                 navigationBar.add(prevBtn);
             });
@@ -173,34 +205,22 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void addNextButton(Metadata video) {
-        // Use cross-season navigation if production data is available
         if (currentProductionData != null) {
             videoManager.getNextVideoWithCrossSeasonSupport(currentVideoFolderId, currentProductionData)
                     .ifPresent(nextVideo -> {
-                        Button nextBtn = createStyledButton("Next episode");
+                        Button nextBtn = new Button("Next", new Icon(VaadinIcon.FORWARD));
+                        nextBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
                         nextBtn.addClickListener(e -> navigateToVideo(nextVideo.getId().toString()));
                         navigationBar.add(nextBtn);
                     });
         } else {
-            // Fallback to old method
             videoManager.getNextVideo(video).ifPresent(nextVideo -> {
-                Button nextBtn = createStyledButton("Next episode");
+                Button nextBtn = new Button("Next", new Icon(VaadinIcon.FORWARD));
+                nextBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
                 nextBtn.addClickListener(e -> navigateToVideo(nextVideo.getId().toString()));
                 navigationBar.add(nextBtn);
             });
         }
-    }
-
-    private Button createStyledButton(String text) {
-        Button button = new Button(text);
-        button.addClassName("option-button");
-        return button;
-    }
-
-    private Optional<ProductionData> findProductionData(Metadata video) {
-        return streamingProductionData.values().stream()
-                .filter(pd -> pd.getMainFolder().getId().equals(video.getId()))
-                .findFirst();
     }
 
     private void navigateToDetails(String productionId) {
@@ -278,19 +298,39 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         }
     }
 
-    private Component buildOptionsTab(SubtitleControlPanel subtitleControls) {
-        Tab optionsTab = new Tab("Options");
-        Tabs tabs = new Tabs(optionsTab);
-        tabs.setWidthFull();
+    protected Component buildSubtitleSettingsContent(String videoId, Metadata video) {
+        return null;
+    }
 
-        Div content = new Div(subtitleControls);
-        content.setWidthFull();
+    private VerticalLayout buildSubtitleSettingsPanel(Metadata video, WatchDetails watchDetails, Set<String> availableSubtitles) {
+        VerticalLayout panel = new VerticalLayout();
+        panel.setVisible(false);
+        panel.setSpacing(true);
+        panel.setPadding(true);
+        panel.setWidthFull();
+        panel.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-radius", "10px")
+                .set("margin-top", "8px");
 
-        VerticalLayout section = new VerticalLayout(tabs, content);
-        section.setSpacing(false);
-        section.setPadding(false);
-        section.setWidthFull();
-        return section;
+        boolean hasDelayControls = !availableSubtitles.isEmpty();
+        if (hasDelayControls) {
+            Span delayHeader = new Span("Subtitle Delay");
+            delayHeader.getStyle()
+                    .set("font-weight", "600")
+                    .set("font-size", "var(--lumo-font-size-m)");
+            panel.add(delayHeader, createSubtitleControls(watchDetails, video));
+        }
+
+        Component extra = buildSubtitleSettingsContent(currentVideoFolderId, video);
+        if (extra != null) {
+            if (hasDelayControls) {
+                panel.add(new Hr());
+            }
+            panel.add(extra);
+        }
+
+        return panel;
     }
 
     private void setupKeyboardShortcuts() {
@@ -415,21 +455,22 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
         buildNavigationBar(video);
         addCustomNavigationButtons(currentVideoFolderId, video);
 
-        add(new Hr(), new H4("Video: " + video.getFilename()));
+        Span videoTitle = new Span(video.getFilename());
+        videoTitle.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("padding", "4px 0 8px 0")
+                .set("display", "block");
+        add(videoTitle);
+
         if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.MP4) {
             videoPlayer = createMp4VideoPlayer(watchDetails, productionData, availableSubtitles);
-            add(videoPlayer);
-            SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails, video);
-            add(buildOptionsTab(subtitleControls));
         } else {
             videoPlayer = createHlsVideoPlayer(watchDetails, productionData, availableSubtitles);
-            add(videoPlayer);
-            if (!availableSubtitles.isEmpty()) {
-                SubtitleControlPanel subtitleControls = createSubtitleControls(watchDetails, video);
-                add(buildOptionsTab(subtitleControls));
-            }
         }
+        add(videoPlayer);
 
-        addCustomComponents(currentVideoFolderId, video);
+        subtitleSettingsPanel = buildSubtitleSettingsPanel(video, watchDetails, availableSubtitles);
+        add(subtitleSettingsPanel);
     }
 }

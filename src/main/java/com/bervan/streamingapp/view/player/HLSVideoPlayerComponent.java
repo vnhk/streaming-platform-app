@@ -134,95 +134,127 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
                 <style>
                 .hls-controls-overlay {
                     position: absolute;
-                    bottom: 60px;
-                    right: 12px;
+                    bottom: 56px;
+                    right: 10px;
                     z-index: 2147483647;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 }
                 .hls-settings-btn {
-                    background: rgba(0,0,0,0.7);
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 12px;
+                    background: rgba(15,15,15,0.75);
+                    border: 1px solid rgba(255,255,255,0.18);
+                    border-radius: 8px;
+                    padding: 7px 13px;
                     cursor: pointer;
-                    color: white;
-                    font-size: 20px;
-                    transition: background 0.2s;
+                    color: #fff;
+                    font-size: 16px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    backdrop-filter: blur(8px);
+                    -webkit-backdrop-filter: blur(8px);
+                    transition: background 0.18s, border-color 0.18s, transform 0.12s;
+                    user-select: none;
+                    letter-spacing: 0.02em;
                 }
                 .hls-settings-btn:hover {
-                    background: rgba(0,0,0,0.9);
+                    background: rgba(255,255,255,0.15);
+                    border-color: rgba(255,255,255,0.35);
+                    transform: scale(1.04);
+                }
+                .hls-settings-btn:active {
+                    transform: scale(0.97);
+                }
+                .hls-settings-btn .hls-btn-label {
+                    font-size: 12px;
+                    font-weight: 500;
+                    opacity: 0.85;
                 }
                 .hls-settings-panel {
-                    display: none;
                     position: absolute;
-                    bottom: 100%;
+                    bottom: calc(100% + 8px);
                     right: 0;
-                    background: rgba(20,20,20,0.95);
-                    border-radius: 8px;
+                    background: rgba(16,16,18,0.96);
+                    border: 1px solid rgba(255,255,255,0.12);
+                    border-radius: 12px;
                     padding: 0;
-                    min-width: 280px;
-                    margin-bottom: 8px;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-                    max-height: 400px;
+                    min-width: 300px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+                    max-height: 420px;
                     overflow-y: auto;
+                    overflow-x: hidden;
+                    opacity: 0;
+                    transform: translateY(8px) scale(0.97);
+                    pointer-events: none;
+                    transition: opacity 0.18s ease, transform 0.18s ease;
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(255,255,255,0.2) transparent;
                 }
                 .hls-settings-panel.open {
-                    display: block;
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                    pointer-events: auto;
                 }
                 .hls-panel-section {
-                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    border-bottom: 1px solid rgba(255,255,255,0.08);
                 }
                 .hls-panel-section:last-child {
                     border-bottom: none;
                 }
                 .hls-panel-header {
-                    padding: 12px 16px;
+                    padding: 10px 16px 8px;
                     font-weight: 600;
-                    color: #fff;
-                    font-size: 14px;
-                    background: rgba(255,255,255,0.05);
+                    color: rgba(255,255,255,0.55);
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 7px;
+                    background: rgba(255,255,255,0.03);
                 }
                 .hls-panel-header svg {
-                    width: 18px;
-                    height: 18px;
+                    width: 14px;
+                    height: 14px;
+                    opacity: 0.7;
                 }
                 .hls-track-list {
                     list-style: none;
                     margin: 0;
-                    padding: 8px 0;
+                    padding: 4px 0;
                 }
                 .hls-track-item {
-                    padding: 10px 16px;
+                    padding: 9px 16px;
                     cursor: pointer;
-                    color: #ccc;
-                    font-size: 13px;
-                    transition: all 0.15s;
+                    color: rgba(255,255,255,0.75);
+                    font-size: 13.5px;
+                    transition: background 0.12s, color 0.12s;
                     display: flex;
                     align-items: center;
                     gap: 10px;
+                    border-radius: 0;
                 }
                 .hls-track-item:hover {
-                    background: rgba(255,255,255,0.1);
+                    background: rgba(255,255,255,0.08);
                     color: #fff;
                 }
                 .hls-track-item.active {
-                    color: #3ea6ff;
-                    background: rgba(62,166,255,0.1);
+                    color: #4da8ff;
+                    background: rgba(77,168,255,0.12);
                 }
                 .hls-track-item.active::before {
                     content: '✓';
-                    font-weight: bold;
+                    font-weight: 700;
+                    font-size: 13px;
+                    min-width: 14px;
                 }
                 .hls-track-item:not(.active)::before {
                     content: '';
-                    width: 14px;
+                    min-width: 14px;
                     display: inline-block;
                 }
                 .hls-no-tracks {
-                    padding: 12px 16px;
-                    color: #888;
+                    padding: 10px 16px;
+                    color: rgba(255,255,255,0.35);
                     font-size: 13px;
                     font-style: italic;
                 }
@@ -502,14 +534,19 @@ public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
 
     private void initializeControlsOverlay() {
         String overlayHtml = """
-                <button class="hls-settings-btn" id="%s_settings_btn" title="Settings">⚙</button>
+                <button class="hls-settings-btn" id="%s_settings_btn" title="Audio & Subtitles">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                        <path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                    </svg>
+                    <span class="hls-btn-label">Audio / Subs</span>
+                </button>
                 <div class="hls-settings-panel" id="%s_settings_panel">
                     <div class="hls-panel-section">
                         <div class="hls-panel-header">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
                             </svg>
-                            Audio
+                            Audio Track
                         </div>
                         <ul class="hls-track-list" id="%s_audio_list">
                             <li class="hls-no-tracks">Loading...</li>
