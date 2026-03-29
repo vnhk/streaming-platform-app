@@ -475,6 +475,7 @@ public class VideoController {
         List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
 
         if (videoFolder.size() != 1) {
+
             log.error("Could not find file based on provided id!");
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
