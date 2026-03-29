@@ -91,43 +91,80 @@ public class StreamingConfigLoader {
     }
 
     private void loadProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
+        String productionName = productionData.getProductionName();
         try {
+            log.info("[{}] Loading production structure (format={})", productionName,
+                    productionData.getProductionDetails().getVideoFormat());
             if (productionData.getProductionDetails().getVideoFormat() == ProductionDetails.VideoFormat.HLS) {
                 loadHLSProductionStructure(productionData, productionFolders);
             } else {
                 loadMP4ProductionStructure(productionData, productionFolders);
             }
+            log.info("[{}] Production structure loaded successfully", productionName);
         } catch (Exception e) {
-            log.error("Error loading production structure", e);
+            log.error("[{}] Error loading production structure: {}", productionName, e.getMessage(), e);
         }
     }
 
     private void loadHLSProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
+        String productionName = productionData.getProductionName();
         BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new HLSTvSeriesRootProductionStructure();
             Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
             List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
             List<HLSSeasonStructure> seasonStructureList = new ArrayList<>();
-            if (seasonDirectories != null && !seasonDirectories.isEmpty()) {
+            if (seasonDirectories == null || seasonDirectories.isEmpty()) {
+                log.warn("[{}] No season directories found at {}", productionName, productionData.getMainFolderPath());
+            } else {
+                log.info("[{}] Found {} season(s)", productionName, seasonDirectories.size());
                 for (Metadata seasonDirectory : seasonDirectories) {
-                    HLSSeasonStructure seasonStructure = new HLSSeasonStructure();
-                    seasonStructure.setSeasonFolder(seasonDirectory);
-                    Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
-                    List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
-                    List<HLSEpisodeStructure> episodeStructureList = new ArrayList<>();
-                    for (Metadata episodeDirectory : episodeDirectories) {
-                        HLSEpisodeStructure episodeStructure = new HLSEpisodeStructure();
-                        episodeStructure.setEpisodeFolder(episodeDirectory);
-                        Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
-                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
-                        if (poster != null && !poster.isEmpty()) {
-                            episodeStructure.setPoster(poster.get(0));
+                    String seasonName = seasonDirectory.getFilename();
+                    try {
+                        log.info("[{}][{}] Processing season", productionName, seasonName);
+                        HLSSeasonStructure seasonStructure = new HLSSeasonStructure();
+                        seasonStructure.setSeasonFolder(seasonDirectory);
+                        String seasonPath = seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator;
+                        Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonPath);
+                        if (seasonsFilesMap == null) {
+                            log.warn("[{}][{}] No files map found for season path: {}", productionName, seasonName, seasonPath);
+                            seasonStructureList.add(seasonStructure);
+                            continue;
                         }
-                        episodeStructureList.add(episodeStructure);
+                        List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
+                        List<HLSEpisodeStructure> episodeStructureList = new ArrayList<>();
+                        if (episodeDirectories == null || episodeDirectories.isEmpty()) {
+                            log.warn("[{}][{}] No episode directories found", productionName, seasonName);
+                        } else {
+                            log.info("[{}][{}] Found {} episode(s)", productionName, seasonName, episodeDirectories.size());
+                            for (Metadata episodeDirectory : episodeDirectories) {
+                                String episodeName = episodeDirectory.getFilename();
+                                try {
+                                    HLSEpisodeStructure episodeStructure = new HLSEpisodeStructure();
+                                    episodeStructure.setEpisodeFolder(episodeDirectory);
+                                    String episodePath = episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator;
+                                    Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodePath);
+                                    if (episodeFilesMap == null) {
+                                        log.warn("[{}][{}][{}] No files map found for episode path: {}", productionName, seasonName, episodeName, episodePath);
+                                    } else {
+                                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
+                                        if (poster != null && !poster.isEmpty()) {
+                                            episodeStructure.setPoster(poster.get(0));
+                                        } else {
+                                            log.debug("[{}][{}][{}] No poster found", productionName, seasonName, episodeName);
+                                        }
+                                    }
+                                    episodeStructureList.add(episodeStructure);
+                                } catch (Exception e) {
+                                    log.error("[{}][{}][{}] Error processing episode: {}", productionName, seasonName, episodeName, e.getMessage(), e);
+                                }
+                            }
+                        }
+                        seasonStructure.setEpisodes(episodeStructureList);
+                        seasonStructureList.add(seasonStructure);
+                    } catch (Exception e) {
+                        log.error("[{}][{}] Error processing season: {}", productionName, seasonName, e.getMessage(), e);
                     }
-                    seasonStructure.setEpisodes(episodeStructureList);
-                    seasonStructureList.add(seasonStructure);
                 }
             }
             ((HLSTvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
@@ -149,39 +186,74 @@ public class StreamingConfigLoader {
     }
 
     private void loadMP4ProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
+        String productionName = productionData.getProductionName();
         BaseRootProductionStructure rootProductionStructure;
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new MP4TvSeriesRootProductionStructure();
             Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
             List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
             List<MP4SeasonStructure> seasonStructureList = new ArrayList<>();
-            if (seasonDirectories != null && !seasonDirectories.isEmpty()) {
+            if (seasonDirectories == null || seasonDirectories.isEmpty()) {
+                log.warn("[{}] No season directories found at {}", productionName, productionData.getMainFolderPath());
+            } else {
+                log.info("[{}] Found {} season(s)", productionName, seasonDirectories.size());
                 for (Metadata seasonDirectory : seasonDirectories) {
-                    MP4SeasonStructure seasonStructure = new MP4SeasonStructure();
-                    seasonStructure.setSeasonFolder(seasonDirectory);
-                    Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator);
-                    List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
-                    List<MP4EpisodeStructure> episodeStructureList = new ArrayList<>();
-                    for (Metadata episodeDirectory : episodeDirectories) {
-                        MP4EpisodeStructure episodeStructure = new MP4EpisodeStructure();
-                        episodeStructure.setEpisodeFolder(episodeDirectory);
-                        Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator);
-                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
-                        if (poster != null && !poster.isEmpty()) {
-                            episodeStructure.setPoster(poster.get(0));
+                    String seasonName = seasonDirectory.getFilename();
+                    try {
+                        log.info("[{}][{}] Processing season", productionName, seasonName);
+                        MP4SeasonStructure seasonStructure = new MP4SeasonStructure();
+                        seasonStructure.setSeasonFolder(seasonDirectory);
+                        String seasonPath = seasonDirectory.getPath() + seasonDirectory.getFilename() + File.separator;
+                        Map<ProductionFileType, List<Metadata>> seasonsFilesMap = productionFolders.get(seasonPath);
+                        if (seasonsFilesMap == null) {
+                            log.warn("[{}][{}] No files map found for season path: {}", productionName, seasonName, seasonPath);
+                            seasonStructureList.add(seasonStructure);
+                            continue;
                         }
+                        List<Metadata> episodeDirectories = seasonsFilesMap.get(ProductionFileType.DIRECTORY);
+                        List<MP4EpisodeStructure> episodeStructureList = new ArrayList<>();
+                        if (episodeDirectories == null || episodeDirectories.isEmpty()) {
+                            log.warn("[{}][{}] No episode directories found", productionName, seasonName);
+                        } else {
+                            log.info("[{}][{}] Found {} episode(s)", productionName, seasonName, episodeDirectories.size());
+                            for (Metadata episodeDirectory : episodeDirectories) {
+                                String episodeName = episodeDirectory.getFilename();
+                                try {
+                                    MP4EpisodeStructure episodeStructure = new MP4EpisodeStructure();
+                                    episodeStructure.setEpisodeFolder(episodeDirectory);
+                                    String episodePath = episodeDirectory.getPath() + episodeDirectory.getFilename() + File.separator;
+                                    Map<ProductionFileType, List<Metadata>> episodeFilesMap = productionFolders.get(episodePath);
+                                    if (episodeFilesMap == null) {
+                                        log.warn("[{}][{}][{}] No files map found for episode path: {}", productionName, seasonName, episodeName, episodePath);
+                                    } else {
+                                        List<Metadata> poster = episodeFilesMap.get(ProductionFileType.POSTER);
+                                        if (poster != null && !poster.isEmpty()) {
+                                            episodeStructure.setPoster(poster.get(0));
+                                        } else {
+                                            log.debug("[{}][{}][{}] No poster found", productionName, seasonName, episodeName);
+                                        }
 
-                        List<Metadata> video = episodeFilesMap.get(ProductionFileType.VIDEO);
-                        if (video != null && !video.isEmpty()) {
-                            episodeStructure.setVideo(video.get(0));
+                                        List<Metadata> video = episodeFilesMap.get(ProductionFileType.VIDEO);
+                                        if (video != null && !video.isEmpty()) {
+                                            episodeStructure.setVideo(video.get(0));
+                                        } else {
+                                            log.warn("[{}][{}][{}] No video file found", productionName, seasonName, episodeName);
+                                        }
+
+                                        List<Metadata> subtitles = episodeFilesMap.get(ProductionFileType.SUBTITLE);
+                                        episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
+                                    }
+                                    episodeStructureList.add(episodeStructure);
+                                } catch (Exception e) {
+                                    log.error("[{}][{}][{}] Error processing episode: {}", productionName, seasonName, episodeName, e.getMessage(), e);
+                                }
+                            }
                         }
-
-                        List<Metadata> subtitles = episodeFilesMap.get(ProductionFileType.SUBTITLE);
-                        episodeStructure.setSubtitles(getSubtitlesMap(subtitles));
-                        episodeStructureList.add(episodeStructure);
+                        seasonStructure.setEpisodes(episodeStructureList);
+                        seasonStructureList.add(seasonStructure);
+                    } catch (Exception e) {
+                        log.error("[{}][{}] Error processing season: {}", productionName, seasonName, e.getMessage(), e);
                     }
-                    seasonStructure.setEpisodes(episodeStructureList);
-                    seasonStructureList.add(seasonStructure);
                 }
             }
             ((MP4TvSeriesRootProductionStructure) rootProductionStructure).setSeasons(seasonStructureList);
