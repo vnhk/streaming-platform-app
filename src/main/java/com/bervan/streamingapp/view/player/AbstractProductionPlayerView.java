@@ -60,6 +60,7 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     private String currentProductionName;
     private ProductionData currentProductionData;
     private double lastSavedTime = 0;
+    private Button downloadButton;
 
     public AbstractProductionPlayerView(VideoManager videoManager,
                                         Map<String, ProductionData> streamingProductionData) {
@@ -173,16 +174,53 @@ public abstract class AbstractProductionPlayerView extends AbstractRemoteControl
     }
 
     private void addDownloadButton(Metadata video) {
-        Button download = new Button("Download", new Icon(VaadinIcon.DOWNLOAD_ALT));
-        download.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-        download.addClickListener(e -> {
-            showPrimaryNotification("Download started. The file will be downloaded shortly.");
-            UI.getCurrent().getPage().executeJs(
-                    "window.open($0, '_blank');",
-                    "/storage/videos/download-and-convert/" + video.getId()
-            );
+        downloadButton = new Button("Download", new Icon(VaadinIcon.DOWNLOAD_ALT));
+        downloadButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        downloadButton.addClickListener(e -> {
+            downloadButton.setEnabled(false);
+            downloadButton.setText("Preparing...");
+            downloadButton.setIcon(new Icon(VaadinIcon.HOURGLASS));
+            showPrimaryNotification("Preparing video for download. This may take a few minutes...");
+
+            String url = "/storage/videos/download-and-convert/" + video.getId();
+            String filename = video.getFilename() + ".mp4";
+
+            UI.getCurrent().getPage().executeJs("""
+                    const viewEl = $0;
+                    const url = $1;
+                    const filename = $2;
+                    fetch(url)
+                        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+                        .then(blob => {
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            viewEl.$server.onDownloadReady(true);
+                        })
+                        .catch(err => {
+                            console.error('Download failed:', err);
+                            viewEl.$server.onDownloadReady(false);
+                        });
+                    """, getElement(), url, filename);
         });
-        navigationBar.add(download);
+        navigationBar.add(downloadButton);
+    }
+
+    @ClientCallable
+    public void onDownloadReady(boolean success) {
+        if (downloadButton != null) {
+            downloadButton.setEnabled(true);
+            downloadButton.setText("Download");
+            downloadButton.setIcon(new Icon(VaadinIcon.DOWNLOAD_ALT));
+        }
+        if (success) {
+            showPrimaryNotification("Download complete!");
+        } else {
+            showErrorNotification("Download failed. Please try again.");
+        }
     }
 
     private void addPreviousButton(Metadata video) {
