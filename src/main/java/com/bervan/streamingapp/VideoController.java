@@ -139,15 +139,18 @@ public class VideoController {
                                     }
                                 }
 
+                                // Write to a temp file so FFmpeg can apply +faststart
+                                // (moves moov atom to front of file = proper seeking, no artifacts, no audio desync)
+                                Path tempFile = Files.createTempFile("video-convert-", ".mp4");
+
                                 command.addAll(List.of(
-                                        "-movflags", "frag_keyframe+empty_moov",
+                                        "-movflags", "+faststart",
                                         "-f", "mp4",
                                         "-v", "info",
-                                        "pipe:1"));
+                                        tempFile.toString()));
 
                                 ProcessBuilder processBuilder = new ProcessBuilder();
                                 processBuilder.command(command);
-
                                 processBuilder.directory(hlsBaseDir.toFile());
                                 processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
 
@@ -158,7 +161,6 @@ public class VideoController {
                                     try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
                                         String line;
                                         while ((line = errorReader.readLine()) != null) {
-                                            // Log everything from FFmpeg to see what's happening
                                             if (line.contains("frame=") || line.contains("time=")) {
                                                 log.info("FFmpeg progress: " + line);
                                             } else if (line.contains("Input") || line.contains("Output") || line.contains("Stream mapping")) {
@@ -176,53 +178,35 @@ public class VideoController {
                                 errorReaderThread.setDaemon(true);
                                 errorReaderThread.start();
 
-                                try (var processOutput = process.getInputStream()) {
-                                    byte[] buffer = new byte[32768]; // Back to larger buffer
+                                try {
+                                    int exitCode = process.waitFor();
+                                    long conversionTime = (System.currentTimeMillis() - startTime) / 1000;
+                                    long fileSizeMb = Files.size(tempFile) / 1024 / 1024;
+                                    log.info("FFmpeg finished with exit code: {}. Output: {} MB in {} seconds",
+                                            exitCode, fileSizeMb, conversionTime);
+
+                                    if (exitCode != 0) {
+                                        log.error("FFmpeg failed with exit code {}", exitCode);
+                                        return;
+                                    }
+
+                                    // Stream the completed temp file to the client
+                                    byte[] buffer = new byte[65536];
                                     int bytesRead;
                                     long totalBytes = 0;
-                                    long lastLogTime = System.currentTimeMillis();
-
-                                    while ((bytesRead = processOutput.read(buffer)) != -1) {
-                                        try {
+                                    try (var fileStream = Files.newInputStream(tempFile)) {
+                                        while ((bytesRead = fileStream.read(buffer)) != -1) {
                                             outputStream.write(buffer, 0, bytesRead);
                                             totalBytes += bytesRead;
-
-                                            long currentTime = System.currentTimeMillis();
-                                            // Flush every second or every 1MB
-                                            if ((currentTime - lastLogTime) > 1000 || totalBytes % (1024 * 1024) == 0) {
-                                                outputStream.flush();
-                                                lastLogTime = currentTime;
-
-                                                // Log every 5MB
-                                                if (totalBytes % (5 * 1024 * 1024) == 0) {
-                                                    long elapsedSeconds = (currentTime - startTime) / 1000;
-                                                    log.info("Streamed {} MB in {} seconds", totalBytes / 1024 / 1024, elapsedSeconds);
-                                                }
-                                            }
-
-                                        } catch (IOException e) {
-                                            long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                            log.info("Client disconnected after {} seconds. Total bytes sent: {} MB",
-                                                    elapsedTime, totalBytes / 1024 / 1024);
-
-                                            if (process != null && process.isAlive()) {
-                                                process.destroyForcibly();
-                                            }
-                                            return;
                                         }
+                                        outputStream.flush();
+                                    } catch (IOException e) {
+                                        long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
+                                        log.info("Client disconnected after {} seconds. Sent: {} MB",
+                                                elapsedTime, totalBytes / 1024 / 1024);
                                     }
-
-                                    int exitCode = process.waitFor();
-                                    long totalTime = (System.currentTimeMillis() - startTime) / 1000;
-
-                                    log.info("FFmpeg finished with exit code: {}. Total: {} MB in {} seconds",
-                                            exitCode, totalBytes / 1024 / 1024, totalTime);
-
-                                } catch (IOException e) {
-                                    log.error("Stream error: {}", e.getMessage());
-                                    if (process != null && process.isAlive()) {
-                                        process.destroyForcibly();
-                                    }
+                                } finally {
+                                    Files.deleteIfExists(tempFile);
                                 }
 
                             } catch (Exception e) {
