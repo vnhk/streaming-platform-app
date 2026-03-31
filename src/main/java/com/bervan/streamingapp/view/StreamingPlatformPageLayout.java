@@ -17,6 +17,7 @@ public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
         addButtonIfVisible(menuButtonsRow, AbstractProductionPlayerView.ROUTE_NAME, "Player", VaadinIcon.PLAY_CIRCLE.create());
         if (AuthService.getUserRole().equals("ROLE_USER")) {
             addButtonIfVisible(menuButtonsRow, AbstractRemoteControlView.ROUTE_NAME, "Remote Control", VaadinIcon.CONTROLLER.create());
+            addButtonIfVisible(menuButtonsRow, AbstractStreamingAdminView.ROUTE_NAME, "Admin", VaadinIcon.COG.create());
         }
         add(menuButtonsRow);
     }

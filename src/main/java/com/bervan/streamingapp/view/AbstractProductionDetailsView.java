@@ -1,7 +1,11 @@
 package com.bervan.streamingapp.view;
 
+import com.bervan.common.component.BervanButton;
+import com.bervan.common.component.BervanButtonStyle;
+import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.JsonLogger;
+import com.bervan.streamingapp.StreamingAdminService;
 import com.bervan.streamingapp.VideoManager;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
@@ -14,14 +18,19 @@ import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.upload.Upload;
+import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 
@@ -34,12 +43,19 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final VideoManager videoManager;
     private final Map<String, ProductionData> streamingProductionData;
+    private StreamingAdminService adminService;
 
     public AbstractProductionDetailsView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData) {
         super(ROUTE_NAME, AbstractProductionPlayerView.ROUTE_NAME);
         this.videoManager = videoManager;
         this.streamingProductionData = streamingProductionData;
         setupViewStyles();
+    }
+
+    public AbstractProductionDetailsView(VideoManager videoManager, Map<String, ProductionData> streamingProductionData,
+                                          StreamingAdminService adminService) {
+        this(videoManager, streamingProductionData);
+        this.adminService = adminService;
     }
 
     private void setupViewStyles() {
@@ -74,6 +90,11 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
             Div contentSection = buildDetails(optionalProduction.get());
 
             add(heroSection, contentSection);
+
+            // Admin section (only for ROLE_USER with admin service)
+            if (adminService != null && "ROLE_USER".equals(AuthService.getUserRole())) {
+                add(buildAdminSection(optionalProduction.get()));
+            }
         } catch (Exception e) {
             log.error("Could not load details!", e);
             showErrorNotification("Could not load details!");
@@ -358,5 +379,185 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         playIcon.setSize("24px");
         overlay.add(playIcon);
         return overlay;
+    }
+
+    private Div buildAdminSection(ProductionData productionData) {
+        Div section = new Div();
+        section.getStyle()
+                .set("background", "rgba(255,255,255,0.05)")
+                .set("border", "1px solid rgba(255,255,255,0.15)")
+                .set("border-radius", "12px")
+                .set("padding", "24px")
+                .set("margin", "20px 5%")
+                .set("width", "90%");
+
+        H3 adminTitle = new H3("Admin");
+        adminTitle.getStyle().set("margin", "0 0 16px 0").set("color", "var(--lumo-primary-color, #7986CB)");
+
+        section.add(adminTitle);
+
+        String productionName = productionData.getProductionName();
+        boolean isTvSeries = productionData.getProductionDetails() != null
+                && productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES;
+
+        if (isTvSeries) {
+            // --- TV Series admin controls ---
+            int currentSeasons = 0;
+            if (productionData.getProductionStructure() instanceof TvSeriesBaseRootProductionStructure tvStruct) {
+                currentSeasons = tvStruct.getSeasons().size();
+            }
+            final int nextSeason = currentSeasons + 1;
+
+            BervanButton createSeasonBtn = new BervanButton("Create Season " + nextSeason, VaadinIcon.PLUS.create(), BervanButtonStyle.PRIMARY);
+            createSeasonBtn.addClickListener(e -> {
+                try {
+                    adminService.createSeason(productionName, nextSeason);
+                    adminService.reloadConfig(streamingProductionData);
+                    showPrimaryNotification("Season " + nextSeason + " created!");
+                } catch (Exception ex) {
+                    showErrorNotification("Failed to create season: " + ex.getMessage());
+                }
+            });
+            section.add(createSeasonBtn);
+
+            // Episode MP4 upload row
+            section.add(buildSectionSeparator());
+            section.add(buildLabel("Upload Episode (MP4)"));
+
+            HorizontalLayout episodeMp4Row = new HorizontalLayout();
+            episodeMp4Row.setAlignItems(com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment.END);
+            episodeMp4Row.setWidthFull();
+            episodeMp4Row.setSpacing(true);
+
+            IntegerField seasonNumField = new IntegerField("Season #");
+            seasonNumField.setMin(1);
+            seasonNumField.setValue(nextSeason > 1 ? nextSeason : 1);
+            seasonNumField.setWidth("100px");
+
+            IntegerField episodeNumField = new IntegerField("Episode #");
+            episodeNumField.setMin(1);
+            episodeNumField.setValue(1);
+            episodeNumField.setWidth("100px");
+
+            MemoryBuffer mp4Buffer = new MemoryBuffer();
+            Upload mp4Upload = new Upload(mp4Buffer);
+            mp4Upload.setAcceptedFileTypes("video/mp4", ".mp4");
+            mp4Upload.setMaxFiles(1);
+            mp4Upload.setDropLabel(new com.vaadin.flow.component.html.Span("Drop MP4 here"));
+            mp4Upload.addSucceededListener(ev -> {
+                try {
+                    adminService.addEpisodeMP4(productionName,
+                            seasonNumField.getValue() != null ? seasonNumField.getValue() : 1,
+                            episodeNumField.getValue() != null ? episodeNumField.getValue() : 1,
+                            mp4Buffer.getInputStream(), ev.getFileName());
+                    adminService.reloadConfig(streamingProductionData);
+                    showPrimaryNotification("Episode uploaded: " + ev.getFileName());
+                } catch (Exception ex) {
+                    showErrorNotification("Failed to upload episode: " + ex.getMessage());
+                }
+            });
+
+            episodeMp4Row.add(seasonNumField, episodeNumField, mp4Upload);
+            section.add(episodeMp4Row);
+
+            // HLS ZIP upload row
+            section.add(buildSectionSeparator());
+            section.add(buildLabel("Upload Episode (HLS ZIP — extracted to Season folder)"));
+
+            HorizontalLayout hlsRow = new HorizontalLayout();
+            hlsRow.setAlignItems(com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment.END);
+            hlsRow.setWidthFull();
+            hlsRow.setSpacing(true);
+
+            IntegerField hlsSeasonField = new IntegerField("Season #");
+            hlsSeasonField.setMin(1);
+            hlsSeasonField.setValue(nextSeason > 1 ? nextSeason : 1);
+            hlsSeasonField.setWidth("100px");
+
+            MemoryBuffer hlsBuffer = new MemoryBuffer();
+            Upload hlsUpload = new Upload(hlsBuffer);
+            hlsUpload.setAcceptedFileTypes("application/zip", ".zip");
+            hlsUpload.setMaxFiles(1);
+            hlsUpload.setDropLabel(new com.vaadin.flow.component.html.Span("Drop ZIP here"));
+            hlsUpload.addSucceededListener(ev -> {
+                try {
+                    adminService.addEpisodeHLS(productionName,
+                            hlsSeasonField.getValue() != null ? hlsSeasonField.getValue() : 1,
+                            hlsBuffer.getInputStream(), ev.getFileName());
+                    adminService.reloadConfig(streamingProductionData);
+                    showPrimaryNotification("HLS ZIP extracted: " + ev.getFileName());
+                } catch (Exception ex) {
+                    showErrorNotification("Failed to upload HLS ZIP: " + ex.getMessage());
+                }
+            });
+
+            hlsRow.add(hlsSeasonField, hlsUpload);
+            section.add(hlsRow);
+
+        } else {
+            // --- Movie admin controls ---
+            section.add(buildLabel("Upload Video (MP4)"));
+
+            MemoryBuffer movieMp4Buffer = new MemoryBuffer();
+            Upload movieMp4Upload = new Upload(movieMp4Buffer);
+            movieMp4Upload.setAcceptedFileTypes("video/mp4", ".mp4");
+            movieMp4Upload.setMaxFiles(1);
+            movieMp4Upload.setDropLabel(new com.vaadin.flow.component.html.Span("Drop MP4 here"));
+            movieMp4Upload.addSucceededListener(ev -> {
+                try {
+                    adminService.addMovieVideoMP4(productionName, movieMp4Buffer.getInputStream(), ev.getFileName());
+                    adminService.reloadConfig(streamingProductionData);
+                    showPrimaryNotification("Video uploaded: " + ev.getFileName());
+                } catch (Exception ex) {
+                    showErrorNotification("Failed to upload video: " + ex.getMessage());
+                }
+            });
+
+            section.add(movieMp4Upload);
+        }
+
+        // --- Subtitles ZIP (both types) ---
+        section.add(buildSectionSeparator());
+        section.add(buildLabel("Upload Subtitles (ZIP — files named S01E01.*.srt/vtt, auto-routed to episode folders)"));
+
+        MemoryBuffer subtitleBuffer = new MemoryBuffer();
+        Upload subtitleUpload = new Upload(subtitleBuffer);
+        subtitleUpload.setAcceptedFileTypes("application/zip", ".zip");
+        subtitleUpload.setMaxFiles(1);
+        subtitleUpload.setDropLabel(new com.vaadin.flow.component.html.Span("Drop subtitles ZIP here"));
+        subtitleUpload.addSucceededListener(ev -> {
+            try {
+                adminService.addSubtitlesFromZip(productionName, subtitleBuffer.getInputStream());
+                adminService.reloadConfig(streamingProductionData);
+                showPrimaryNotification("Subtitles extracted from: " + ev.getFileName());
+            } catch (Exception ex) {
+                showErrorNotification("Failed to extract subtitles: " + ex.getMessage());
+            }
+        });
+
+        section.add(subtitleUpload);
+
+        // Reload config button
+        section.add(buildSectionSeparator());
+        BervanButton reloadBtn = new BervanButton("Reload Config", VaadinIcon.REFRESH.create(), BervanButtonStyle.PRIMARY);
+        reloadBtn.addClickListener(e -> {
+            adminService.reloadConfig(streamingProductionData);
+            showPrimaryNotification("Config reloaded!");
+        });
+        section.add(reloadBtn);
+
+        return section;
+    }
+
+    private com.vaadin.flow.component.html.Hr buildSectionSeparator() {
+        com.vaadin.flow.component.html.Hr hr = new com.vaadin.flow.component.html.Hr();
+        hr.getStyle().set("margin", "12px 0").set("opacity", "0.2");
+        return hr;
+    }
+
+    private Paragraph buildLabel(String text) {
+        Paragraph p = new Paragraph(text);
+        p.getStyle().set("margin", "8px 0 4px 0").set("font-size", "0.85rem").set("opacity", "0.7");
+        return p;
     }
 }
