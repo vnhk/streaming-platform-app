@@ -382,19 +382,33 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
     }
 
     private Div buildAdminSection(ProductionData productionData) {
+        Div wrapper = new Div();
+        wrapper.getStyle().set("margin", "20px 5%").set("width", "90%");
+
+        // Toggle button
+        Button toggleBtn = new Button("Admin", new Icon(VaadinIcon.COG));
+        toggleBtn.getStyle()
+                .set("background", "rgba(255,255,255,0.08)")
+                .set("border", "1px solid rgba(255,255,255,0.2)")
+                .set("color", "var(--lumo-body-text-color)")
+                .set("border-radius", "8px")
+                .set("padding", "8px 16px")
+                .set("cursor", "pointer");
+
         Div section = new Div();
         section.getStyle()
                 .set("background", "rgba(255,255,255,0.05)")
                 .set("border", "1px solid rgba(255,255,255,0.15)")
-                .set("border-radius", "12px")
+                .set("border-radius", "0 0 12px 12px")
                 .set("padding", "24px")
-                .set("margin", "20px 5%")
-                .set("width", "90%");
+                .set("display", "none");
 
-        H3 adminTitle = new H3("Admin");
-        adminTitle.getStyle().set("margin", "0 0 16px 0").set("color", "var(--lumo-primary-color, #7986CB)");
+        toggleBtn.addClickListener(e -> {
+            String current = section.getStyle().get("display");
+            section.getStyle().set("display", "none".equals(current) ? "block" : "none");
+        });
 
-        section.add(adminTitle);
+        wrapper.add(toggleBtn, section);
 
         String productionName = productionData.getProductionName();
         boolean isTvSeries = productionData.getProductionDetails() != null
@@ -546,7 +560,7 @@ public abstract class AbstractProductionDetailsView extends AbstractStreamingPag
         });
         section.add(reloadBtn);
 
-        return section;
+        return wrapper;
     }
 
     private com.vaadin.flow.component.html.Hr buildSectionSeparator() {

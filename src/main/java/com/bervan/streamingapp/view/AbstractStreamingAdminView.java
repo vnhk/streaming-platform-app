@@ -41,9 +41,10 @@ public abstract class AbstractStreamingAdminView extends AbstractStreamingPage {
         content.getStyle().set("padding", "20px");
 
         H2 title = new H2("Streaming Admin");
-        title.getStyle().set("margin-bottom", "20px");
+        title.getStyle().set("margin-bottom", "20px").set("color", "var(--lumo-body-text-color)");
 
         H3 productionsTitle = new H3("Productions");
+        productionsTitle.getStyle().set("color", "var(--lumo-body-text-color)");
         VerticalLayout productionsList = buildProductionsList();
 
         BervanButton addButton = new BervanButton("Add Production", VaadinIcon.PLUS.create(), BervanButtonStyle.PRIMARY);
@@ -60,7 +61,9 @@ public abstract class AbstractStreamingAdminView extends AbstractStreamingPage {
         list.setPadding(false);
 
         if (streamingProductionData.isEmpty()) {
-            list.add(new Paragraph("No productions found. Add one using the button above."));
+            Paragraph empty = new Paragraph("No productions found. Add one using the button above.");
+            empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            list.add(empty);
             return list;
         }
 
@@ -74,12 +77,14 @@ public abstract class AbstractStreamingAdminView extends AbstractStreamingPage {
                     .set("border-bottom", "1px solid var(--bervan-border-color, rgba(255,255,255,0.1))");
 
             Paragraph name = new Paragraph(pd.getProductionName());
-            name.getStyle().set("margin", "0").set("flex-grow", "1");
+            name.getStyle().set("margin", "0").set("flex-grow", "1")
+                    .set("color", "var(--lumo-body-text-color)");
 
             String type = pd.getProductionDetails() != null && pd.getProductionDetails().getType() != null
                     ? pd.getProductionDetails().getType().name() : "UNKNOWN";
             Paragraph typeLabel = new Paragraph(type);
-            typeLabel.getStyle().set("margin", "0").set("opacity", "0.7").set("min-width", "100px");
+            typeLabel.getStyle().set("margin", "0").set("min-width", "100px")
+                    .set("color", "var(--lumo-secondary-text-color)");
 
             Button detailsBtn = new Button("Details", VaadinIcon.FILE_TEXT.create());
             detailsBtn.addClickListener(e ->
