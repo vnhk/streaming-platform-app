@@ -136,6 +136,11 @@
             <version>latest</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>com.bervan</groupId>
+            <artifactId>streaming-platform-react</artifactId>
+            <version>latest</version>
+        </dependency>
     </dependencies>
 
     <build>
