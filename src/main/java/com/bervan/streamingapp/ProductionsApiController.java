@@ -1,6 +1,5 @@
 package com.bervan.streamingapp;
 
-import com.bervan.common.service.AuthService;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
@@ -56,9 +55,6 @@ public class ProductionsApiController {
 
     @GetMapping
     public ResponseEntity<List<ProductionSummaryDto>> listProductions() {
-        if (AuthService.getLoggedUserId() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         List<ProductionSummaryDto> result = streamingProductionData.values().stream()
                 .map(this::toSummaryDto)
                 .sorted(Comparator.comparing(
@@ -71,9 +67,6 @@ public class ProductionsApiController {
 
     @GetMapping("/{name}")
     public ResponseEntity<ProductionDetailsDto> getProduction(@PathVariable String name) {
-        if (AuthService.getLoggedUserId() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         ProductionData pd = streamingProductionData.get(name);
         if (pd == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(toDetailsDto(pd));

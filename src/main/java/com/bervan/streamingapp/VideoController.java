@@ -1,6 +1,5 @@
 package com.bervan.streamingapp;
 
-import com.bervan.common.service.AuthService;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.logging.BaseProcessContext;
 import com.bervan.logging.JsonLogger;
@@ -47,9 +46,6 @@ public class VideoController {
         BaseProcessContext context = BaseProcessContext.builder()
                 .processName("download-and-convert").build();
 
-        if (AuthService.getLoggedUserId() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
 
         List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
         if (videoFolder.size() != 1) {
@@ -382,9 +378,6 @@ public class VideoController {
     public ResponseEntity<Resource> serveHls(HttpServletRequest request,
                                              @PathVariable String videoFolderId) throws Exception {
 
-        if (AuthService.getLoggedUserId() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
 
         List<Metadata> metadata = videoManager.loadById(videoFolderId);
         if (metadata.isEmpty()) {
@@ -452,9 +445,6 @@ public class VideoController {
             @RequestHeader(value = "Range", required = false) String httpRangeList
     ) throws IOException {
         // Security check using AuthService
-        if (AuthService.getLoggedUserId() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
 
         List<Metadata> videoFolder = videoManager.loadById(videoFolderId);
 
