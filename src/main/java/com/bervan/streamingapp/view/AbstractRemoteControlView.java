@@ -33,6 +33,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+@Deprecated
 public abstract class AbstractRemoteControlView extends AbstractStreamingPage implements BeforeEnterObserver {
     public static final String ROUTE_NAME = "/streaming-platform/remote-control";
     private final JsonLogger logger = JsonLogger.getLogger(AbstractRemoteControlView.class, "streaming");

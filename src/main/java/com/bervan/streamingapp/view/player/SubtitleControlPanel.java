@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 /**
  * Component for controlling subtitle delays with optional permanent save per language.
  */
+@Deprecated
 public class SubtitleControlPanel extends VerticalLayout {
     private static final double SUBTITLE_DELAY_STEP = 0.5;
 

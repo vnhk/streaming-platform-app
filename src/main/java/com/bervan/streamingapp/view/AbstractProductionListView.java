@@ -29,6 +29,7 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Deprecated
 public abstract class AbstractProductionListView extends AbstractRemoteControlSupportedView {
     public static final String ROUTE_NAME = "/streaming-platform";
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");

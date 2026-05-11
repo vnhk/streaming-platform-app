@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 
 @Getter
 @Setter
+@Deprecated
 public class HLSVideoPlayerComponent extends AbstractVideoPlayer {
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final Element videoElement;

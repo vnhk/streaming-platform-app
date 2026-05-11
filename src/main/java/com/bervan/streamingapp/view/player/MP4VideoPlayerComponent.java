@@ -9,6 +9,7 @@ import java.util.UUID;
 /**
  * Component encapsulating the HTML5 video player with subtitle support
  */
+@Deprecated
 public class MP4VideoPlayerComponent extends AbstractVideoPlayer {
     private final Element videoElement;
     private final String videoId;

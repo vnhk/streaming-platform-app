@@ -4,6 +4,7 @@ import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+@Deprecated
 public abstract class AbstractRemoteControlSupportedView extends AbstractStreamingPage {
 
     public AbstractRemoteControlSupportedView(String route, String... notVisibleButtonRoutes) {

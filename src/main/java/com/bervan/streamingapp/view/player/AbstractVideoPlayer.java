@@ -5,6 +5,7 @@ import com.vaadin.flow.dom.Element;
 
 import java.util.Set;
 
+@Deprecated
 public abstract class AbstractVideoPlayer extends VerticalLayout {
     protected final Set<String> availableSubtitles;
 

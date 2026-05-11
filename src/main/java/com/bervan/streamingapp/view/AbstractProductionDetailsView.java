@@ -38,6 +38,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Deprecated
 public abstract class AbstractProductionDetailsView extends AbstractStreamingPage implements HasUrlParameter<String> {
     public static final String ROUTE_NAME = "/streaming-platform/details";
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");

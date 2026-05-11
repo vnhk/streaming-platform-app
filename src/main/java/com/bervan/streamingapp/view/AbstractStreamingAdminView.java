@@ -21,6 +21,7 @@ import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 
 import java.util.Map;
 
+@Deprecated
 public abstract class AbstractStreamingAdminView extends AbstractStreamingPage {
     public static final String ROUTE_NAME = "/streaming-platform/admin";
 

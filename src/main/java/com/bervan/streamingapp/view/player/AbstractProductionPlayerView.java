@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 
 @JavaScript("https://cdn.jsdelivr.net/npm/hls.js@latest")
+@Deprecated
 public abstract class AbstractProductionPlayerView extends AbstractRemoteControlSupportedView
         implements BeforeEnterObserver {
     public static final String ROUTE_NAME = "/streaming-platform/video-player/:productionName/:videoFolderId";

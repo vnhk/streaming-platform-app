@@ -14,6 +14,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import lombok.Getter;
 
+@Deprecated
 public abstract class AbstractStreamingPage extends AbstractPageView {
     @Getter
     StreamingPlatformPageLayout streamingPlatformPageLayout;

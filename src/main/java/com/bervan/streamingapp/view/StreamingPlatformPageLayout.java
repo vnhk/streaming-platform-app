@@ -7,6 +7,7 @@ import com.bervan.common.service.AuthService;
 import com.bervan.streamingapp.view.player.AbstractProductionPlayerView;
 import com.vaadin.flow.component.icon.VaadinIcon;
 
+@Deprecated
 public final class StreamingPlatformPageLayout extends MenuNavigationComponent {
 
     public StreamingPlatformPageLayout(String routeName, String... notVisibleButtonRoutes) {
