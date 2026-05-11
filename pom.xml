@@ -48,7 +48,7 @@
        <dependencies>
         <dependency>
             <groupId>com.bervan</groupId>
-            <artifactId>common-vaadin</artifactId>
+            <artifactId>common</artifactId>
             <version>latest</version>
         </dependency>
         <dependency>
