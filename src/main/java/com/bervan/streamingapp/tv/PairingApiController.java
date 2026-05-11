@@ -10,7 +10,7 @@ import java.util.Map;
  *
  * Flow:
  * 1. TV calls POST /api/tv/pair/start -> receives {"pairCode": "123456"}
- * 2. User enters this code in the main Vaadin app (TV Pairing view).
+ * 2. User enters this code in the React app (TV Pairing view).
  * 3. Backend calls PairingService.confirmPairing(code, token) from TvPairingProxyController.
  * 4. TV polls GET /api/tv/pair/token/{pairCode} until it receives {"status":"READY","token":"..."}
  *

@@ -10,8 +10,8 @@ RUN mvn install:install-file -Dfile=./core.jar -DgroupId=com.bervan -DartifactId
 RUN mvn install:install-file -Dfile=./history-tables-core.jar -DgroupId=com.bervan -DartifactId=history-tables-core -Dversion=latest -Dpackaging=jar -DgeneratePom=true
 RUN mvn install:install-file -Dfile=./ie-entities.jar -DgroupId=com.bervan -DartifactId=ie-entities -Dversion=latest -Dpackaging=jar -DgeneratePom=true
 
-COPY --from=common-vaadin /app/common-vaadin.jar /app/common-vaadin.jar
-RUN mvn install:install-file -Dfile=./common-vaadin.jar -DgroupId=com.bervan -DartifactId=common-vaadin -Dversion=latest -Dpackaging=jar -DgeneratePom=true
+COPY --from=common /app/common.jar /app/common.jar
+RUN mvn install:install-file -Dfile=./common.jar -DgroupId=com.bervan -DartifactId=common -Dversion=latest -Dpackaging=jar -DgeneratePom=true
 
 COPY --from=file-storage-app /app/file-storage-app.jar /app/file-storage-app.jar
 RUN mvn install:install-file -Dfile=./file-storage-app.jar -DgroupId=com.bervan -DartifactId=file-storage-app -Dversion=latest -Dpackaging=jar -DgeneratePom=true

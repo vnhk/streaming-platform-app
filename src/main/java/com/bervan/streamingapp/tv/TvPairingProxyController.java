@@ -13,7 +13,7 @@ import java.util.Map;
  * Endpoint in the main application that connects logged-in user with a TV device.
  *
  * Flow:
- * - User is logged in in the main Vaadin app.
+ * - User is logged in in the main app (React frontend).
  * - User enters pairing code from TV screen into the main app UI.
  * - Main app calls POST /api/tv/pair/assign with {"pairCode": "..."}.
  * - Controller generates an access token for current user and stores it
