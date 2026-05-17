@@ -37,7 +37,6 @@ Video streaming platform with HLS/MP4 playback, WebSocket-based remote control (
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/streaming/video` | Stream video (byte-range aware) |
-| `GET /api/streaming/light-player/page` | Light HTML player page |
 
 ## Episode Sorting
 

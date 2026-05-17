@@ -3,8 +3,11 @@ package com.bervan.streamingapp;
 import com.bervan.streamingapp.config.ProductionData;
 import com.bervan.streamingapp.config.ProductionDetails;
 import com.bervan.streamingapp.config.structure.BaseRootProductionStructure;
+import com.bervan.streamingapp.config.structure.EpisodeStructure;
 import com.bervan.streamingapp.config.structure.MovieBaseRootProductionStructure;
 import com.bervan.streamingapp.config.structure.TvSeriesBaseRootProductionStructure;
+import com.bervan.streamingapp.config.structure.SeasonStructure;
+import com.bervan.filestorage.model.Metadata;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +21,11 @@ import java.util.stream.Collectors;
 public class ProductionsApiController {
 
     private final Map<String, ProductionData> streamingProductionData;
+    private final VideoManager videoManager;
 
-    public ProductionsApiController(Map<String, ProductionData> streamingProductionData) {
+    public ProductionsApiController(Map<String, ProductionData> streamingProductionData, VideoManager videoManager) {
         this.streamingProductionData = streamingProductionData;
+        this.videoManager = videoManager;
     }
 
     // ---- DTOs ----
@@ -47,8 +52,21 @@ public class ProductionsApiController {
 
     public record ProductionDetailsDto(
             ProductionSummaryDto summary,
-            List<SeasonDto> seasons,    // TV_SERIES
-            List<EpisodeDto> episodes   // MOVIE / OTHER
+            List<SeasonDto> seasons,
+            List<EpisodeDto> episodes
+    ) {}
+
+    public record VideoInfoDto(
+            String productionName,
+            String videoFolderId,
+            String videoName,
+            String videoFormat,
+            String videoUrl,
+            List<String> availableSubtitles,
+            Map<String, String> subtitleUrls,
+            double watchProgress,
+            String nextEpisodeId,
+            String prevEpisodeId
     ) {}
 
     // ---- Endpoints ----
@@ -86,7 +104,7 @@ public class ProductionsApiController {
 
             if (b64.startsWith("data:")) {
                 int comma = b64.indexOf(',');
-                String header = b64.substring(5, comma); // e.g. "image/png;base64"
+                String header = b64.substring(5, comma);
                 contentType = header.split(";")[0];
                 data = b64.substring(comma + 1);
             } else {
@@ -101,6 +119,73 @@ public class ProductionsApiController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/{name}/video/{videoFolderId}")
+    public ResponseEntity<VideoInfoDto> getVideoInfo(@PathVariable String name, @PathVariable String videoFolderId) {
+        ProductionData pd = streamingProductionData.get(name);
+        if (pd == null) return ResponseEntity.notFound().build();
+
+        ProductionDetails details = pd.getProductionDetails();
+        if (details == null) return ResponseEntity.notFound().build();
+
+        BaseRootProductionStructure structure = pd.getProductionStructure();
+        if (structure == null) return ResponseEntity.notFound().build();
+
+        String videoFormat = details.getVideoFormat() != null ? details.getVideoFormat().name() : "MP4";
+        String videoUrl;
+        if ("HLS".equals(videoFormat)) {
+            videoUrl = "/storage/videos/hls/" + videoFolderId + "/master.m3u8";
+        } else {
+            videoUrl = "/storage/videos/video-folder/" + videoFolderId;
+        }
+
+        String videoName = null;
+        if (structure instanceof TvSeriesBaseRootProductionStructure tvSeries) {
+            for (SeasonStructure season : tvSeries.getSeasons()) {
+                for (EpisodeStructure ep : season.getEpisodes()) {
+                    if (ep.getEpisodeFolder().getId().toString().equals(videoFolderId)) {
+                        videoName = ep.getEpisodeFolder().getFilename();
+                        break;
+                    }
+                }
+                if (videoName != null) break;
+            }
+        } else if (structure instanceof MovieBaseRootProductionStructure movie) {
+            for (Metadata m : movie.getVideosFolders()) {
+                if (m.getId().toString().equals(videoFolderId)) {
+                    videoName = m.getFilename();
+                    break;
+                }
+            }
+        }
+
+        List<Metadata> videoFolderMeta = videoManager.loadById(videoFolderId);
+        List<String> availableSubtitles = new ArrayList<>();
+        Map<String, String> subtitleUrls = new LinkedHashMap<>();
+        if (!videoFolderMeta.isEmpty()) {
+            Set<String> subs = videoManager.availableSubtitles(videoFolderMeta.get(0));
+            for (String lang : subs) {
+                availableSubtitles.add(lang);
+                subtitleUrls.put(lang, "/storage/videos/subtitles/" + videoFolderId + "/" + lang);
+            }
+        }
+
+        Optional<Metadata> nextVideo = videoManager.getNextVideoWithCrossSeasonSupport(videoFolderId, pd);
+        Optional<Metadata> prevVideo = videoManager.getPrevVideoWithCrossSeasonSupport(videoFolderId, pd);
+
+        return ResponseEntity.ok(new VideoInfoDto(
+                name,
+                videoFolderId,
+                videoName != null ? videoName : videoFolderId,
+                videoFormat,
+                videoUrl,
+                availableSubtitles,
+                subtitleUrls,
+                0.0,
+                nextVideo.map(m -> m.getId().toString()).orElse(null),
+                prevVideo.map(m -> m.getId().toString()).orElse(null)
+        ));
     }
 
     // ---- Mapping helpers ----

@@ -34,6 +34,11 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
         URI uri = request.getURI();
         MultiValueMap<String, String> queryParams = UriComponentsBuilder.fromUri(uri).build().getQueryParams();
         String token = queryParams.getFirst("token");
+        String key = queryParams.getFirst("key");
+
+        if (key != null) {
+            return true;
+        }
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         UUID userIdFromSession = null;

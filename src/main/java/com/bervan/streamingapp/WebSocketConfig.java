@@ -15,13 +15,16 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private RemoteControlWebSocketHandler remoteControlHandler;
     @Autowired
     private TvAccessTokenService tokenService;
+    @Autowired
+    private WsKeyService wsKeyService;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(remoteControlHandler, "/ws/remote-control")
 //                .addInterceptors(new HttpSessionHandshakeInterceptor())
                 .addInterceptors(new TokenHandshakeInterceptor(tokenService),
-                        new WebSocketHandshakeInterceptor())
+                        new WebSocketHandshakeInterceptor(),
+                        new WsKeyHandshakeInterceptor(wsKeyService))
                 .setAllowedOrigins("*");
     }
 }
