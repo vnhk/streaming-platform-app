@@ -1,6 +1,7 @@
 package com.bervan.streamingapp;
 
 import com.bervan.common.user.User;
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.tv.TvAccessTokenService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
@@ -20,6 +21,7 @@ import java.util.UUID;
 @Service
 public class TokenHandshakeInterceptor implements HandshakeInterceptor {
     private final TvAccessTokenService tokenService;
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
 
     public TokenHandshakeInterceptor(TvAccessTokenService tokenService) {
         this.tokenService = tokenService;
@@ -35,8 +37,10 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
         MultiValueMap<String, String> queryParams = UriComponentsBuilder.fromUri(uri).build().getQueryParams();
         String token = queryParams.getFirst("token");
         String key = queryParams.getFirst("key");
+        String roomId = queryParams.getFirst("roomId");
 
         if (key != null) {
+            log.info("TokenHandshakeInterceptor: delegating to WsKeyHandshakeInterceptor for key=" + key + " roomId=" + roomId);
             return true;
         }
 
@@ -44,11 +48,18 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
         UUID userIdFromSession = null;
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
             userIdFromSession = ((User) auth.getPrincipal()).getId();
-        } else if (token == null || tokenService.resolveUserId(token).isEmpty()) {
+            log.info("TokenHandshakeInterceptor: authenticated via session, userId=" + userIdFromSession);
+        } else if (token == null) {
+            log.warn("TokenHandshakeInterceptor: no session, no token, no key — rejecting");
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return false;
+        } else if (tokenService.resolveUserId(token).isEmpty()) {
+            log.warn("TokenHandshakeInterceptor: invalid token, rejecting — token=" + token);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         } else {
             userIdFromSession = tokenService.resolveUserId(token).get();
+            log.info("TokenHandshakeInterceptor: resolved userId via token, userId=" + userIdFromSession + " token=" + token);
         }
 
         attributes.put("userId", userIdFromSession);

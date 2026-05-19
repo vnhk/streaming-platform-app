@@ -1,5 +1,6 @@
 package com.bervan.streamingapp;
 
+import com.bervan.logging.JsonLogger;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -16,6 +17,7 @@ import java.util.UUID;
 public class WsKeyHandshakeInterceptor implements HandshakeInterceptor {
 
     private final WsKeyService wsKeyService;
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
 
     public WsKeyHandshakeInterceptor(WsKeyService wsKeyService) {
         this.wsKeyService = wsKeyService;
@@ -34,8 +36,13 @@ public class WsKeyHandshakeInterceptor implements HandshakeInterceptor {
             Optional<UUID> userIdOpt = wsKeyService.validateAndConsume(key, roomId);
             if (userIdOpt.isPresent()) {
                 attributes.put("userId", userIdOpt.get());
+                log.info("WsKeyHandshakeInterceptor: key validated, userId=" + userIdOpt.get() + " roomId=" + roomId);
                 return true;
+            } else {
+                log.warn("WsKeyHandshakeInterceptor: validateAndConsume returned empty for key=" + key + " roomId=" + roomId);
             }
+        } else {
+            log.warn("WsKeyHandshakeInterceptor: missing params — key=" + key + " roomId=" + roomId);
         }
 
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
