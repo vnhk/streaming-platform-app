@@ -43,6 +43,9 @@ public class TvTokenAuthenticationFilter extends OncePerRequestFilter {
         Authentication existing = SecurityContextHolder.getContext().getAuthentication();
         if (existing == null || !existing.isAuthenticated()) {
             String token = request.getHeader("X-Auth-Token");
+            if (token == null || token.isBlank()) {
+                token = request.getParameter("token");
+            }
             Optional<UUID> userIdOpt = tvAccessTokenService.resolveUserId(token);
             if (userIdOpt.isPresent()) {
                 UUID userId = userIdOpt.get();
