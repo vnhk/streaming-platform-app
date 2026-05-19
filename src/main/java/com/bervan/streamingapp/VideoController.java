@@ -402,7 +402,7 @@ public class VideoController {
 
         // Security check
         if (!file.startsWith(baseDir)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
 
         if (!Files.exists(file)) {
