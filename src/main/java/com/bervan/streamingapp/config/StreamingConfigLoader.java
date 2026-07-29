@@ -1,5 +1,7 @@
 package com.bervan.streamingapp.config;
 
+import com.bervan.common.service.OpenAIService;
+import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
@@ -15,6 +17,7 @@ import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStruct
 import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -26,13 +29,20 @@ import java.util.*;
 @Service
 public class StreamingConfigLoader {
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
-
     private final FileServiceManager fileServiceManager;
     private final VideoManager videoManager;
+    private final OpenAIService openAIService;
+
+    @Value("${openai.api.key:}")
+    private String openAiApiKey;
 
     public StreamingConfigLoader(FileServiceManager fileServiceManager, VideoManager videoManager) {
         this.fileServiceManager = fileServiceManager;
         this.videoManager = videoManager;
+        this.openAIService = new OpenAIService(
+                "You are a helpful assistant that generates movie and TV series metadata in JSON format. " +
+                        "Provide accurate information based on the title given."
+        );
     }
 
     public Map<String, ProductionData> getStringProductionDataMap() {
@@ -60,6 +70,7 @@ public class StreamingConfigLoader {
 
             List<Metadata> details = productionFolders.get(mainFolderPath).get(ProductionFileType.DETAILS);
             ProductionDetails productionDetails;
+
             if (details != null && !details.isEmpty()) {
                 Metadata metadata = details.get(0);
                 try {
@@ -74,8 +85,21 @@ public class StreamingConfigLoader {
                     continue;
                 }
             } else {
-                log.error("Details file does not exist or cannot be loaded: Details file is missing for production " + mainFolderPath);
-                continue;
+                log.warn("Details file does not exist for production: {}. Generating with AI...", mainFolderPath);
+                try {
+                    productionDetails = generateProductionDetails(mainFolder, productionFolders, mainFolderPath);
+                    if (productionDetails != null) {
+                        productionData.setProductionName(productionDetails.getName());
+                        productionData.setProductionDetails(productionDetails);
+                        saveDetailsToFile(mainFolder, mainFolderPath, productionDetails);
+                    } else {
+                        log.error("Failed to generate production details for: {}", mainFolderPath);
+                        continue;
+                    }
+                } catch (Exception e) {
+                    log.error("Error generating ProductionDetails with AI", e);
+                    continue;
+                }
             }
 
             loadMainPosterSrc(productionFolders, mainFolderPath, productionData);
@@ -176,6 +200,7 @@ public class StreamingConfigLoader {
         productionData.setProductionStructure(rootProductionStructure);
     }
 
+
     private void updateRoot(ProductionData productionData, MetadataByPathAndType productionFolders, BaseRootProductionStructure rootProductionStructure) {
         rootProductionStructure.setMainFolder(productionData.getMainFolder());
         rootProductionStructure.setDetails(productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.DETAILS).get(0));
@@ -264,6 +289,109 @@ public class StreamingConfigLoader {
         updateRoot(productionData, productionFolders, rootProductionStructure);
 
         productionData.setProductionStructure(rootProductionStructure);
+    }
+
+
+    private ProductionDetails generateProductionDetails(Metadata mainFolder, MetadataByPathAndType productionFolders, String mainFolderPath) {
+        String folderName = mainFolder.getFilename();
+
+        // Determine if it's a TV series or movie based on season folders
+        boolean isTvSeries = false;
+        Map<ProductionFileType, List<Metadata>> mainFolderContent = productionFolders.get(mainFolderPath);
+        if (mainFolderContent != null) {
+            List<Metadata> directories = mainFolderContent.get(ProductionFileType.DIRECTORY);
+            if (directories != null) {
+                for (Metadata dir : directories) {
+                    String dirName = dir.getFilename();
+                    if (dirName.matches("(?i)^(S\\d+|Season\\s*\\d+).*")) {
+                        isTvSeries = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        String videoType = isTvSeries ? "TV series" : "movie";
+
+        String prompt = String.format(
+                "Based on the title '%s' which is a %s, generate a JSON object with the following structure:\n" +
+                        "{\n" +
+                        "  \"name\": \"<full title>\",\n" +
+                        "  \"description\": \"<brief description in English>\",\n" +
+                        "  \"type\": \"%s\",\n" +
+                        "  \"audioLang\": [\"<list of audio languages, e.g., EN, PL - use original audio language ex. for US movies use 'EN', for PL movies use 'PL'>\"],\n" +
+                        "  \"releaseYearStart\": <year>,\n" +
+                        "  \"releaseYearEnd\": <year or null for movies and tv series in progress>,\n" +
+                        "  \"categories\": [\"<list of categories, e.g., [\"Action\", \"Adventure\", \"Drama\", \"Historical\"]>\"],\n" +
+                        "  \"tags\": [\"<list of tags example: [\"vikings\", \"norse mythology\", \"raids\", \"warriors\", \"power struggles\"]>\"],\n" +
+                        "  \"country\": \"<country of origin ex. Canada>\",\n" +
+                        "  \"rating\": <rating from 0-10 example 8.5>,\n" +
+                        "  \"videoFormat\": \"hls\"\n" +
+                        "}\n" +
+                        "Return ONLY the JSON object, no additional text.",
+                folderName,
+                videoType,
+                isTvSeries ? "tv_series" : "movie"
+        );
+
+        log.info("Asking AI to generate details for: {}", folderName);
+        String aiResponse = openAIService.askAI(prompt, OpenAIService.GPT_4O_MINI, 0.3, openAiApiKey);
+
+        if (aiResponse == null || aiResponse.isBlank()) {
+            log.error("AI returned null or empty response for: {}", folderName);
+            return null;
+        }
+
+        try {
+            // Clean up the response to extract JSON if wrapped in markdown
+            String jsonString = aiResponse.trim();
+            if (jsonString.startsWith("```json")) {
+                jsonString = jsonString.substring(7);
+            }
+            if (jsonString.startsWith("```")) {
+                jsonString = jsonString.substring(3);
+            }
+            if (jsonString.endsWith("```")) {
+                jsonString = jsonString.substring(0, jsonString.length() - 3);
+            }
+            jsonString = jsonString.trim();
+
+            ObjectMapper objectMapper = new ObjectMapper();
+            ProductionDetails details = objectMapper.readValue(jsonString, ProductionDetails.class);
+            log.info("Successfully generated production details for: {}", folderName);
+            return details;
+        } catch (Exception e) {
+            log.error("Error parsing AI response to ProductionDetails for: {}", folderName, e);
+            log.error("AI Response was: {}", aiResponse);
+            return null;
+        }
+    }
+
+    private void saveDetailsToFile(Metadata mainFolder, String mainFolderPath, ProductionDetails productionDetails) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            String jsonContent = objectMapper.writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(productionDetails);
+
+            byte[] jsonBytes = jsonContent.getBytes(StandardCharsets.UTF_8);
+
+            // Save the file to the production folder
+            String detailsFileName = "details.json";
+            fileServiceManager.save(
+                    new BervanMockMultiPartFile(
+                            detailsFileName,
+                            detailsFileName,
+                            "application/json",
+                            new ByteArrayInputStream(jsonBytes)
+                    ),
+                    "Auto-generated production details",
+                    mainFolderPath
+            );
+
+            log.info("Successfully saved details.json for: {}", mainFolderPath);
+        } catch (Exception e) {
+            log.error("Error saving details.json for: {}", mainFolderPath, e);
+        }
     }
 
     private Map<String, Metadata> getSubtitlesMap(List<Metadata> subtitles) {
