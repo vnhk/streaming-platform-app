@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.config;
 
+import com.bervan.common.ImageScaleUtility;
 import com.bervan.common.service.OpenAIService;
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
@@ -20,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -413,6 +416,9 @@ public class StreamingConfigLoader {
         if (mainFolderPoster != null && !mainFolderPoster.isEmpty()) {
             try {
                 byte[] file = fileServiceManager.readFile(mainFolderPoster.get(0));
+                BufferedImage original = ImageIO.read(new ByteArrayInputStream(file));
+                Base64.getEncoder().encodeToString(ImageScaleUtility.scaleImage(original, original.getHeight(), 0.05f).toByteArray());;
+
                 productionData.setBase64PosterSrc(toBase64(new ByteArrayInputStream(file)));
             } catch (Exception e) {
                 log.error("Error converting poster to base64", e);
