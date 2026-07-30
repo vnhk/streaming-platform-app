@@ -100,7 +100,7 @@ public class VideoManager {
         }
 
         if (subtitlesFound.isEmpty()) {
-            log.error("Found 0 subtitles for language = {}. All available subtitles: {}", language, subtitles.stream()
+            log.info("Found 0 subtitles for language = {}. All available subtitles: {}", language, subtitles.stream()
                     .map(Metadata::getFilename)
                     .collect(Collectors.joining(", ")));
             return Optional.empty();
