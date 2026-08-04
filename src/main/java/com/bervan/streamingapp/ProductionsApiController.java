@@ -7,10 +7,12 @@ import com.bervan.streamingapp.config.structure.EpisodeStructure;
 import com.bervan.streamingapp.config.structure.MovieBaseRootProductionStructure;
 import com.bervan.streamingapp.config.structure.TvSeriesBaseRootProductionStructure;
 import com.bervan.streamingapp.config.structure.SeasonStructure;
+import com.bervan.common.user.User;
 import com.bervan.filestorage.model.Metadata;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -122,7 +124,8 @@ public class ProductionsApiController {
     }
 
     @GetMapping("/{name}/video/{videoFolderId}")
-    public ResponseEntity<VideoInfoDto> getVideoInfo(@PathVariable String name, @PathVariable String videoFolderId) {
+    public ResponseEntity<VideoInfoDto> getVideoInfo(@PathVariable String name, @PathVariable String videoFolderId,
+                                                       @AuthenticationPrincipal User user) {
         ProductionData pd = streamingProductionData.get(name);
         if (pd == null) return ResponseEntity.notFound().build();
 
@@ -174,6 +177,10 @@ public class ProductionsApiController {
         Optional<Metadata> nextVideo = videoManager.getNextVideoWithCrossSeasonSupport(videoFolderId, pd);
         Optional<Metadata> prevVideo = videoManager.getPrevVideoWithCrossSeasonSupport(videoFolderId, pd);
 
+        double watchProgress = user != null
+                ? videoManager.getOrCreateWatchDetails(user.getId().toString(), videoFolderId).getCurrentVideoTime()
+                : 0.0;
+
         return ResponseEntity.ok(new VideoInfoDto(
                 name,
                 videoFolderId,
@@ -182,7 +189,7 @@ public class ProductionsApiController {
                 videoUrl,
                 availableSubtitles,
                 subtitleUrls,
-                0.0,
+                watchProgress,
                 nextVideo.map(m -> m.getId().toString()).orElse(null),
                 prevVideo.map(m -> m.getId().toString()).orElse(null)
         ));
