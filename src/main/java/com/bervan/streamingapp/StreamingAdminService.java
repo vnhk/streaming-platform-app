@@ -1,6 +1,7 @@
 package com.bervan.streamingapp;
 
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
+import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
@@ -12,6 +13,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -91,6 +93,33 @@ public class StreamingAdminService {
         BervanMockMultiPartFile videoFile = new BervanMockMultiPartFile(videoFilename, videoFilename, "video/mp4", videoStream);
         fileServiceManager.save(videoFile, "", productionPath);
         log.info("Saved movie video {} for production: {}", videoFilename, productionName);
+    }
+
+    public void addPoster(String productionName, InputStream posterStream, String posterFilename) throws Exception {
+        String productionPath = videoManager.appFolder + File.separator + productionName + File.separator;
+
+        // Clean up any existing poster files (e.g. replacing poster.jpg with poster.png or vice versa)
+        try {
+            Set<Metadata> existingFiles = fileServiceManager.loadByPath(productionPath);
+            if (existingFiles != null) {
+                for (Metadata file : existingFiles) {
+                    if ("poster.jpg".equalsIgnoreCase(file.getFilename())
+                            || "poster.png".equalsIgnoreCase(file.getFilename())
+                            || "poster.jpeg".equalsIgnoreCase(file.getFilename())) {
+                        fileServiceManager.delete(file);
+                        log.info("Deleted existing poster {} for production: {}", file.getFilename(), productionName);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not check/delete old poster in {}: {}", productionPath, e.getMessage());
+        }
+
+        String filename = resolveImageFilename(posterFilename);
+        String contentType = filename.endsWith(".jpg") ? "image/jpeg" : "image/png";
+        BervanMockMultiPartFile posterFile = new BervanMockMultiPartFile(filename, filename, contentType, posterStream);
+        fileServiceManager.save(posterFile, "", productionPath);
+        log.info("Saved poster {} for production: {}", filename, productionName);
     }
 
     public void addSubtitlesFromZip(String productionName, InputStream zipStream) throws Exception {

@@ -144,4 +144,20 @@ public class StreamingAdminApiController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    @PostMapping(value = "/productions/{name}/poster", consumes = "multipart/form-data")
+    public ResponseEntity<Void> uploadPoster(
+            @PathVariable String name,
+            @RequestParam MultipartFile file
+    ) {
+        if (!isAdmin()) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        if (file == null || file.isEmpty()) return ResponseEntity.badRequest().build();
+        try {
+            adminService.addPoster(name, file.getInputStream(), file.getOriginalFilename());
+            adminService.reloadConfig(streamingProductionData);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }
