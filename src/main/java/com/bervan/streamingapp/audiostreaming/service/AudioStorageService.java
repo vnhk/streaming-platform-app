@@ -39,6 +39,7 @@ public class AudioStorageService {
 
     private final Map<String, AudioAlbum> albumsById = new ConcurrentHashMap<>();
     private final Map<String, AudioTrack> tracksById = new ConcurrentHashMap<>();
+    private final Map<String, AudioTrack> tracksByMetadataId = new ConcurrentHashMap<>();
 
     public AudioStorageService(FileServiceManager fileServiceManager,
                                FileDiskStorageService fileDiskStorageService,
@@ -100,7 +101,7 @@ public class AudioStorageService {
         }
     }
 
-    private void ensureTrackMetadata(File file, String albumStoragePath) {
+    private Metadata ensureTrackMetadata(File file, String albumStoragePath) {
         try {
             String filename = file.getName();
             String cleanPath = ensureStoragePathEndsWithSlash(albumStoragePath);
@@ -108,11 +109,31 @@ public class AudioStorageService {
             if (existing.isEmpty()) {
                 Metadata m = fileDBStorageService.store(LocalDateTime.now(), cleanPath, filename, "Audio track: " + filename, getFileExtension(filename), false);
                 m.setFileSize(file.length());
-                fileServiceManager.updateMetadata(m);
+                Metadata saved = fileServiceManager.updateMetadata(m);
                 log.info("Registered track metadata in DB: {}{}", cleanPath, filename);
+                return saved;
+            } else {
+                return existing.get(0);
             }
         } catch (Exception e) {
             log.warn("Could not ensure track metadata for {}: {}", file.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void registerTrack(AudioTrack track) {
+        if (track == null) return;
+        tracksById.put(track.getId(), track);
+        if (track.getMetadataId() != null) {
+            tracksByMetadataId.put(track.getMetadataId(), track);
+        }
+    }
+
+    private void unregisterTrack(AudioTrack track) {
+        if (track == null) return;
+        tracksById.remove(track.getId());
+        if (track.getMetadataId() != null) {
+            tracksByMetadataId.remove(track.getMetadataId());
         }
     }
 
@@ -171,6 +192,7 @@ public class AudioStorageService {
         log.info("Reloading audio library from disk...");
         albumsById.clear();
         tracksById.clear();
+        tracksByMetadataId.clear();
 
         Path root = getAudioLibraryRoot();
         if (!Files.exists(root) || !Files.isDirectory(root)) {
@@ -199,7 +221,7 @@ public class AudioStorageService {
                             if (album != null) {
                                 albumsById.put(album.getId(), album);
                                 for (AudioTrack track : album.getTracks()) {
-                                    tracksById.put(track.getId(), track);
+                                    registerTrack(track);
                                 }
                             }
                         } catch (Exception e) {
@@ -260,7 +282,10 @@ public class AudioStorageService {
             if (audioFilesOnDisk.containsKey(track.getFilename())) {
                 Path trackFile = audioFilesOnDisk.remove(track.getFilename());
                 checkTagMismatch(track, trackFile.toFile(), artistDirName, album.getTitle());
-                ensureTrackMetadata(trackFile.toFile(), albumStoragePath);
+                Metadata m = ensureTrackMetadata(trackFile.toFile(), albumStoragePath);
+                if (m != null && m.getId() != null) {
+                    track.setMetadataId(m.getId().toString());
+                }
                 updatedTracks.add(track);
             }
         }
@@ -268,7 +293,6 @@ public class AudioStorageService {
         // Add any newly discovered audio files not yet in album.json
         for (Path newFile : audioFilesOnDisk.values()) {
             AudioTrack newTrack = createTrackFromFile(newFile.toFile(), albumPath, artistDirName, album.getTitle(), updatedTracks.size() + 1);
-            ensureTrackMetadata(newFile.toFile(), albumStoragePath);
             updatedTracks.add(newTrack);
         }
 
@@ -391,8 +415,13 @@ public class AudioStorageService {
         String relativePath = getAudioLibraryRoot().relativize(file.toPath()).toString();
         String trackId = UUID.nameUUIDFromBytes(relativePath.getBytes(StandardCharsets.UTF_8)).toString();
 
+        String albumStoragePath = getStoragePathForAlbum(albumPath);
+        Metadata m = ensureTrackMetadata(file, albumStoragePath);
+        String metadataId = (m != null && m.getId() != null) ? m.getId().toString() : null;
+
         AudioTrack track = AudioTrack.builder()
                 .id(trackId)
+                .metadataId(metadataId)
                 .title(title)
                 .artist(artist)
                 .artists(List.of(artist))
@@ -641,7 +670,7 @@ public class AudioStorageService {
         saveAlbumJson(album, albumDir);
         generateM3u8Playlist(album, albumDir);
 
-        tracksById.put(newTrack.getId(), newTrack);
+        registerTrack(newTrack);
         log.info("Added track [{}] to album [{}]", cleanTitle, album.getTitle());
         return newTrack;
     }
@@ -751,7 +780,7 @@ public class AudioStorageService {
             track.setRelativePath(getAudioLibraryRoot().relativize(trackFile).toString());
             track.setHasTagMismatch(false);
             track.setTagMismatchDetails(null);
-            tracksById.put(track.getId(), track);
+            registerTrack(track);
         }
 
         album.setTitle(newTitle);
@@ -838,7 +867,7 @@ public class AudioStorageService {
         saveAlbumJson(album, albumDir);
         generateM3u8Playlist(album, albumDir);
 
-        tracksById.put(track.getId(), track);
+        registerTrack(track);
         log.info("Updated track [{}] and saved ID3 tags", track.getTitle());
         return track;
     }
@@ -874,7 +903,7 @@ public class AudioStorageService {
             saveAlbumJson(album, albumDir);
             generateM3u8Playlist(album, albumDir);
 
-            tracksById.remove(trackId);
+            unregisterTrack(track);
             log.info("Deleted track [{}] from album [{}]", track.getTitle(), album.getTitle());
         }
     }
@@ -883,7 +912,7 @@ public class AudioStorageService {
         AudioAlbum album = albumsById.remove(albumId);
         if (album != null) {
             for (AudioTrack track : album.getTracks()) {
-                tracksById.remove(track.getId());
+                unregisterTrack(track);
             }
 
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
@@ -956,7 +985,7 @@ public class AudioStorageService {
             track.setGenre(genre);
             track.setHasTagMismatch(false);
             track.setTagMismatchDetails(null);
-            tracksById.put(track.getId(), track);
+            registerTrack(track);
         }
 
         album.setHasTagMismatch(false);
@@ -1014,6 +1043,31 @@ public class AudioStorageService {
 
     public Optional<AudioTrack> getTrackById(String id) {
         return Optional.ofNullable(tracksById.get(id));
+    }
+
+    public AudioTrack getTrackByMetadataId(String metadataId) {
+        if (metadataId == null || metadataId.isBlank()) return null;
+        AudioTrack track = tracksByMetadataId.get(metadataId);
+        if (track == null) {
+            track = tracksById.values().stream()
+                    .filter(t -> metadataId.equals(t.getMetadataId()))
+                    .findFirst()
+                    .orElse(null);
+            if (track != null) {
+                tracksByMetadataId.put(metadataId, track);
+            }
+        }
+        if (track != null) {
+            File f = getTrackFile(track.getId());
+            if (f != null && f.exists()) {
+                return track;
+            }
+        }
+        return null;
+    }
+
+    public List<AudioTrack> getAllTracks() {
+        return new ArrayList<>(tracksById.values());
     }
 
     public AudioLibrarySummary getLibrarySummary(String query, String genre, String artist, Integer year) {

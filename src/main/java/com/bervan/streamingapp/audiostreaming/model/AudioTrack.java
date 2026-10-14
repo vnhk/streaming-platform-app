@@ -14,6 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class AudioTrack {
     private String id;
+    private String metadataId;
     private String title;
     private String artist;
     @Builder.Default
