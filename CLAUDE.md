@@ -3,7 +3,9 @@
 > **IMPORTANT**: Keep this file updated when making significant changes to the codebase. This file serves as persistent memory between Claude Code sessions.
 
 ## Overview
-Video streaming application with HLS/MP4 support, remote control via WebSocket, and subtitle management.
+Multimedia streaming application with:
+1. Video streaming (HLS/MP4 support, remote control via WebSocket, and subtitle management)
+2. Audio streaming & library management (`audiostreaming` package): zero-database disk storage, ID3 tagging, auto-generated M3U8 playlists, AI metadata enrichment, HTTP Range streaming, and ZIP download/upload.
 
 ## Key Architecture
 
@@ -201,3 +203,30 @@ Episode sorting uses regex pattern: `(?:Ep(?:isode)?\s?)(\d+)(?![0-9a-zA-Z])`
 4. **Subtitle sync** - Delays stored per-language (EN, PL, ES) in `WatchDetails`
 5. **Production data injection** - Views receive `Map<String, ProductionData> streamingProductionData` as Spring bean (not a service)
 6. **Video player URL format** - `/streaming-platform/video-player/:productionName/:videoFolderId` requires both production name and video folder ID
+
+## Audio Streaming (`com.bervan.streamingapp.audiostreaming`)
+
+### Disk Structure
+```
+Audio Library/
+  └── {Artist}/
+       └── {Album} ({Year})/
+            ├── cover.jpg               # Standard artwork for VLC / mobile players
+            ├── playlist.m3u8           # UTF-8 M3U8 playlist with track durations and metadata
+            ├── album.json              # Canonical metadata cache on disk (zero DB tables)
+            ├── 01 - Track Title.mp3    # Embedded ID3v2 tags (Title, Artist, Album, Year, Genre, Track#)
+            └── ...
+```
+
+### Key Services
+- `AudioStorageService` - Filesystem scanning, `album.json` management, `playlist.m3u8` auto-generation, tag mismatch detection (`hasTagMismatch`), cascade updates (renaming album/artist updates physical directories and MP3 tags across all tracks).
+- `AudioTagService` - Reads and writes ID3v1/ID3v2 tags safely using `mp3agic`.
+- `AudioAiMetadataService` - GPT-4o-mini enrichment for album release year, genres, description, and track list suggestion with fallback defaults.
+- `AudioExportImportService` - Streams album ZIP, full library ZIP, master M3U8 playlist, and handles ZIP uploads with auto-extraction and tag detection.
+
+### REST Endpoints
+- `GET /api/audio/albums`, `GET /api/audio/albums/{id}`, `GET /api/audio/albums/{id}/cover`
+- `GET /api/audio/tracks/{id}/stream` - HTTP 206 Partial Content (Range requests) for HTML5 `<audio>` playback
+- `GET /api/audio/download/tracks/{id}`, `albums/{id}`, `albums/{id}/playlist.m3u8`, `library`, `library/playlist.m3u8`
+- `POST /api/audio/admin/albums`, `POST /api/audio/admin/upload-track-auto`, `POST /api/audio/admin/upload-zip`, `POST /api/audio/admin/enrich`, `POST /api/audio/admin/reload`
+
