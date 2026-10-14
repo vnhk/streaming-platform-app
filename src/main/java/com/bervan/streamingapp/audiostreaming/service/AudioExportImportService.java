@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.audiostreaming.service;
 
+import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.audiostreaming.model.*;
 import org.springframework.stereotype.Service;
@@ -188,13 +189,13 @@ public class AudioExportImportService {
 
             AudioAlbum album = storageService.createAlbum(createRequest, null);
 
-            // Copy cover if found
+            // Update cover via storageService if found
             if (extractedCover != null) {
-                Path albumDir = storageService.getAudioLibraryRoot().resolve(album.getFolderPath());
-                Path coverDest = albumDir.resolve("cover.jpg");
-                Files.copy(extractedCover, coverDest, StandardCopyOption.REPLACE_EXISTING);
-                album.setCoverFilename("cover.jpg");
-                album.setHasCover(true);
+                byte[] coverBytes = Files.readAllBytes(extractedCover);
+                BervanMockMultiPartFile coverMultipart = new BervanMockMultiPartFile(
+                        "cover.jpg", "cover.jpg", "image/jpeg", new ByteArrayInputStream(coverBytes)
+                );
+                storageService.updateCover(album.getId(), coverMultipart);
             }
 
             // Sort audio files by name
@@ -208,11 +209,11 @@ public class AudioExportImportService {
                 int num = info.trackNumber() != null ? info.trackNumber() : trackNum;
 
                 byte[] bytes = Files.readAllBytes(audioPath);
-                MultipartFile multipart = new CustomMultipartFile(
+                BervanMockMultiPartFile multipart = new BervanMockMultiPartFile(
                         audioPath.getFileName().toString(),
                         audioPath.getFileName().toString(),
                         "audio/mpeg",
-                        bytes
+                        new ByteArrayInputStream(bytes)
                 );
 
                 storageService.addTrack(album.getId(), multipart, trackTitle, artist, num);
@@ -248,31 +249,5 @@ public class AudioExportImportService {
                     .map(Path::toFile)
                     .forEach(File::delete);
         } catch (Exception ignored) {}
-    }
-
-    // Lightweight in-memory MultipartFile implementation for internal piping
-    private static class CustomMultipartFile implements MultipartFile {
-        private final String name;
-        private final String originalFilename;
-        private final String contentType;
-        private final byte[] content;
-
-        public CustomMultipartFile(String name, String originalFilename, String contentType, byte[] content) {
-            this.name = name;
-            this.originalFilename = originalFilename;
-            this.contentType = contentType;
-            this.content = content != null ? content : new byte[0];
-        }
-
-        @Override public String getName() { return name; }
-        @Override public String getOriginalFilename() { return originalFilename; }
-        @Override public String getContentType() { return contentType; }
-        @Override public boolean isEmpty() { return content.length == 0; }
-        @Override public long getSize() { return content.length; }
-        @Override public byte[] getBytes() { return content; }
-        @Override public InputStream getInputStream() { return new ByteArrayInputStream(content); }
-        @Override public void transferTo(File dest) throws IOException, IllegalStateException {
-            Files.write(dest.toPath(), content);
-        }
     }
 }

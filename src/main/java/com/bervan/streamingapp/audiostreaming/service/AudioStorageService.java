@@ -1,5 +1,10 @@
 package com.bervan.streamingapp.audiostreaming.service;
 
+import com.bervan.filestorage.model.BervanMockMultiPartFile;
+import com.bervan.filestorage.model.Metadata;
+import com.bervan.filestorage.service.FileDBStorageService;
+import com.bervan.filestorage.service.FileDiskStorageService;
+import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.audiostreaming.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,10 +13,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,18 +27,12 @@ import java.util.stream.Collectors;
 @Service
 public class AudioStorageService {
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "audio-streaming");
+    private final FileServiceManager fileServiceManager;
+    private final FileDiskStorageService fileDiskStorageService;
+    private final FileDBStorageService fileDBStorageService;
     private final AudioTagService audioTagService;
     private final AudioAiMetadataService aiMetadataService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @Value("${file.service.storage.folder.main:}")
-    private String mainStorageFolder;
-
-    @Value("${file.service.storage.folder[main]:}")
-    private String mainStorageFolderBracket;
-
-    @Value("${file.service.storage.folders.mapping:}")
-    private String folderMappingStr;
 
     @Value("${audio-streaming.file-storage-relative-path:/Audio Library}")
     private String audioRelativePath;
@@ -39,9 +40,111 @@ public class AudioStorageService {
     private final Map<String, AudioAlbum> albumsById = new ConcurrentHashMap<>();
     private final Map<String, AudioTrack> tracksById = new ConcurrentHashMap<>();
 
-    public AudioStorageService(AudioTagService audioTagService, AudioAiMetadataService aiMetadataService) {
+    public AudioStorageService(FileServiceManager fileServiceManager,
+                               FileDiskStorageService fileDiskStorageService,
+                               FileDBStorageService fileDBStorageService,
+                               AudioTagService audioTagService,
+                               AudioAiMetadataService aiMetadataService) {
+        this.fileServiceManager = fileServiceManager;
+        this.fileDiskStorageService = fileDiskStorageService;
+        this.fileDBStorageService = fileDBStorageService;
         this.audioTagService = audioTagService;
         this.aiMetadataService = aiMetadataService;
+    }
+
+    public String getAudioRelativePath() {
+        String path = (audioRelativePath != null && !audioRelativePath.isBlank())
+                ? audioRelativePath.trim()
+                : "/Audio Library";
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        while (path.endsWith("/") && path.length() > 1) {
+            path = path.substring(0, path.length() - 1);
+        }
+        return path;
+    }
+
+    public Path getAudioLibraryRoot() {
+        return fileDiskStorageService.getFile(getAudioRelativePath());
+    }
+
+    private String ensureStoragePathEndsWithSlash(String path) {
+        if (path == null || path.isBlank()) return "/";
+        return path.endsWith("/") ? path : path + "/";
+    }
+
+    private String getStoragePathForArtist(String artist) {
+        return ensureStoragePathEndsWithSlash(getAudioRelativePath() + "/" + sanitizeFileName(artist));
+    }
+
+    private String getStoragePathForAlbum(AudioAlbum album) {
+        return ensureStoragePathEndsWithSlash(getAudioRelativePath() + "/" + album.getFolderPath().replace('\\', '/'));
+    }
+
+    private String getStoragePathForAlbum(Path albumPath) {
+        String rel = getAudioLibraryRoot().relativize(albumPath).toString().replace('\\', '/');
+        return ensureStoragePathEndsWithSlash(getAudioRelativePath() + "/" + rel);
+    }
+
+    private void ensureDirectoryMetadata(String parentStoragePath, String dirName) {
+        try {
+            String cleanParent = ensureStoragePathEndsWithSlash(parentStoragePath);
+            List<Metadata> existing = fileDBStorageService.loadByPathAndFilename(cleanParent, dirName);
+            if (existing.isEmpty()) {
+                fileDBStorageService.createEmptyDirectory(cleanParent, dirName);
+                log.info("Registered directory metadata in DB: {}{}", cleanParent, dirName);
+            }
+        } catch (Exception e) {
+            log.warn("Could not ensure directory metadata for {}{}: {}", parentStoragePath, dirName, e.getMessage());
+        }
+    }
+
+    private void ensureTrackMetadata(File file, String albumStoragePath) {
+        try {
+            String filename = file.getName();
+            String cleanPath = ensureStoragePathEndsWithSlash(albumStoragePath);
+            List<Metadata> existing = fileDBStorageService.loadByPathAndFilename(cleanPath, filename);
+            if (existing.isEmpty()) {
+                Metadata m = fileDBStorageService.store(LocalDateTime.now(), cleanPath, filename, "Audio track: " + filename, getFileExtension(filename), false);
+                m.setFileSize(file.length());
+                fileServiceManager.updateMetadata(m);
+                log.info("Registered track metadata in DB: {}{}", cleanPath, filename);
+            }
+        } catch (Exception e) {
+            log.warn("Could not ensure track metadata for {}: {}", file.getName(), e.getMessage());
+        }
+    }
+
+    private void saveOrUpdateFile(String filename, byte[] content, String contentType, String description, String storagePath, Path dir) {
+        String cleanStoragePath = ensureStoragePathEndsWithSlash(storagePath);
+        Metadata existingMeta = null;
+        try {
+            List<Metadata> found = fileDBStorageService.loadByPathAndFilename(cleanStoragePath, filename);
+            if (!found.isEmpty()) {
+                existingMeta = found.get(0);
+            }
+        } catch (Exception e) {
+            log.warn("Could not check existing metadata for {} in {}: {}", filename, cleanStoragePath, e.getMessage());
+        }
+
+        if (existingMeta != null) {
+            Path targetFile = dir.resolve(filename);
+            fileDiskStorageService.overwriteFile(targetFile, content);
+            existingMeta.setFileSize((long) content.length);
+            existingMeta.setModificationDate(LocalDateTime.now());
+            fileServiceManager.updateMetadata(existingMeta);
+        } else {
+            // Delete file on disk if exists to prevent FileDiskStorageService from creating filename(1).ext
+            try {
+                Files.deleteIfExists(dir.resolve(filename));
+            } catch (Exception ignored) {}
+
+            BervanMockMultiPartFile mockFile = new BervanMockMultiPartFile(
+                    filename, filename, contentType, new ByteArrayInputStream(content)
+            );
+            fileServiceManager.save(mockFile, description, cleanStoragePath);
+        }
     }
 
     @PostConstruct
@@ -49,47 +152,19 @@ public class AudioStorageService {
         try {
             Path root = getAudioLibraryRoot();
             if (!Files.exists(root)) {
-                Files.createDirectories(root);
-                log.info("Created audio library directory at: {}", root.toAbsolutePath());
+                String cleanPath = getAudioRelativePath();
+                if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
+                fileServiceManager.createEmptyDirectory("", cleanPath);
+                log.info("Initialized audio library directory via FileServiceManager at: {}", root.toAbsolutePath());
+            } else {
+                String cleanPath = getAudioRelativePath();
+                if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
+                ensureDirectoryMetadata("/", cleanPath);
             }
             reloadAll();
         } catch (Exception e) {
             log.error("Failed to initialize AudioStorageService: {}", e.getMessage(), e);
         }
-    }
-
-    public Path getAudioLibraryRoot() {
-        String base = null;
-        if (mainStorageFolder != null && !mainStorageFolder.isBlank()) {
-            base = mainStorageFolder.trim();
-        } else if (mainStorageFolderBracket != null && !mainStorageFolderBracket.isBlank()) {
-            base = mainStorageFolderBracket.trim();
-        } else if (folderMappingStr != null && !folderMappingStr.isBlank()) {
-            for (String mapping : folderMappingStr.split(",")) {
-                String[] parts = mapping.split(":", 2);
-                if (parts.length == 2) {
-                    if ("audio".equalsIgnoreCase(parts[0].trim()) || "music".equalsIgnoreCase(parts[0].trim())) {
-                        return Paths.get(parts[1].trim()).toAbsolutePath().normalize();
-                    } else if ("main".equalsIgnoreCase(parts[0].trim())) {
-                        base = parts[1].trim();
-                    }
-                }
-            }
-        }
-
-        if (base == null || base.isBlank()) {
-            base = System.getProperty("user.dir") + File.separator + "files";
-        }
-
-        String rel = (audioRelativePath != null && !audioRelativePath.isBlank())
-                ? audioRelativePath.trim()
-                : "/Audio Library";
-
-        if (rel.startsWith("/") || rel.startsWith("\\")) {
-            rel = rel.substring(1);
-        }
-
-        return Paths.get(base, rel).toAbsolutePath().normalize();
     }
 
     public synchronized void reloadAll() {
@@ -103,15 +178,21 @@ public class AudioStorageService {
             return;
         }
 
+        String rootStoragePath = ensureStoragePathEndsWithSlash(getAudioRelativePath());
+
         try (var artistDirs = Files.list(root)) {
             artistDirs.filter(Files::isDirectory).forEach(artistPath -> {
                 String artistDirName = artistPath.getFileName().toString();
                 if (artistDirName.startsWith(".")) return;
+                ensureDirectoryMetadata(rootStoragePath, artistDirName);
+
+                String artistStoragePath = getStoragePathForArtist(artistDirName);
 
                 try (var albumDirs = Files.list(artistPath)) {
                     albumDirs.filter(Files::isDirectory).forEach(albumPath -> {
                         String albumDirName = albumPath.getFileName().toString();
                         if (albumDirName.startsWith(".")) return;
+                        ensureDirectoryMetadata(artistStoragePath, albumDirName);
 
                         try {
                             AudioAlbum album = loadOrScanAlbum(albumPath, artistDirName);
@@ -162,7 +243,7 @@ public class AudioStorageService {
                 album.setHasCover(false);
             }
 
-            // Always ensure playlist.m3u8 is up to date
+            // Always ensure album.json and playlist.m3u8 are up to date
             saveAlbumJson(album, albumPath);
             generateM3u8Playlist(album, albumPath);
         }
@@ -171,14 +252,15 @@ public class AudioStorageService {
     }
 
     private void validateAndRefreshAlbumTracks(AudioAlbum album, Path albumPath, String artistDirName) {
-        // Check if files listed in album.json still exist on disk and check for new audio files
         Map<String, Path> audioFilesOnDisk = findAudioFiles(albumPath);
         List<AudioTrack> updatedTracks = new ArrayList<>();
+        String albumStoragePath = getStoragePathForAlbum(album);
 
         for (AudioTrack track : album.getTracks()) {
             if (audioFilesOnDisk.containsKey(track.getFilename())) {
                 Path trackFile = audioFilesOnDisk.remove(track.getFilename());
                 checkTagMismatch(track, trackFile.toFile(), artistDirName, album.getTitle());
+                ensureTrackMetadata(trackFile.toFile(), albumStoragePath);
                 updatedTracks.add(track);
             }
         }
@@ -186,6 +268,7 @@ public class AudioStorageService {
         // Add any newly discovered audio files not yet in album.json
         for (Path newFile : audioFilesOnDisk.values()) {
             AudioTrack newTrack = createTrackFromFile(newFile.toFile(), albumPath, artistDirName, album.getTitle(), updatedTracks.size() + 1);
+            ensureTrackMetadata(newFile.toFile(), albumStoragePath);
             updatedTracks.add(newTrack);
         }
 
@@ -235,9 +318,11 @@ public class AudioStorageService {
         int trackIndex = 1;
         Set<String> albumGenres = new LinkedHashSet<>();
         byte[] extractedCover = null;
+        String albumStoragePath = getStoragePathForAlbum(albumPath);
 
         for (Path file : audioFiles.values()) {
             AudioTrack track = createTrackFromFile(file.toFile(), albumPath, artistDirName, albumTitle, trackIndex++);
+            ensureTrackMetadata(file.toFile(), albumStoragePath);
             tracks.add(track);
             if (track.getGenres() != null && !track.getGenres().isEmpty()) {
                 albumGenres.addAll(track.getGenres());
@@ -258,10 +343,9 @@ public class AudioStorageService {
         Path existingCover = findCoverImage(albumPath);
         if (existingCover == null && extractedCover != null) {
             try {
-                Path coverDest = albumPath.resolve("cover.jpg");
-                Files.write(coverDest, extractedCover);
-                existingCover = coverDest;
-                log.info("Extracted embedded cover art to {}", coverDest);
+                saveOrUpdateFile("cover.jpg", extractedCover, "image/jpeg", "Audio album cover", albumStoragePath, albumPath);
+                existingCover = albumPath.resolve("cover.jpg");
+                log.info("Extracted embedded cover art to {}", existingCover);
             } catch (Exception e) {
                 log.warn("Failed to write extracted cover: {}", e.getMessage());
             }
@@ -356,9 +440,10 @@ public class AudioStorageService {
 
     public synchronized void saveAlbumJson(AudioAlbum album, Path albumPath) {
         try {
-            Path target = albumPath.resolve("album.json");
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(album);
-            Files.writeString(target, json, StandardCharsets.UTF_8);
+            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+            String storagePath = getStoragePathForAlbum(album);
+            saveOrUpdateFile("album.json", bytes, "application/json", "Audio album metadata", storagePath, albumPath);
         } catch (Exception e) {
             log.error("Failed to write album.json in {}: {}", albumPath, e.getMessage(), e);
         }
@@ -366,7 +451,6 @@ public class AudioStorageService {
 
     public synchronized void generateM3u8Playlist(AudioAlbum album, Path albumPath) {
         try {
-            Path m3u8Path = albumPath.resolve("playlist.m3u8");
             StringBuilder sb = new StringBuilder();
             sb.append("#EXTM3U\n");
 
@@ -377,7 +461,9 @@ public class AudioStorageService {
                 sb.append(track.getFilename()).append("\n");
             }
 
-            Files.writeString(m3u8Path, sb.toString(), StandardCharsets.UTF_8);
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            String storagePath = getStoragePathForAlbum(album);
+            saveOrUpdateFile("playlist.m3u8", bytes, "application/x-mpegURL", "Audio playlist", storagePath, albumPath);
             log.debug("Generated playlist.m3u8 for album: {}", album.getTitle());
         } catch (Exception e) {
             log.error("Failed to generate playlist.m3u8 in {}: {}", albumPath, e.getMessage(), e);
@@ -392,10 +478,24 @@ public class AudioStorageService {
         Integer year = request.getReleaseYear() != null ? request.getReleaseYear() : Year.now().getValue();
 
         String folderName = request.isSingle() ? "Singles" : sanitizeFileName(title + " (" + year + ")");
-        Path artistDir = getAudioLibraryRoot().resolve(sanitizeFileName(artist));
-        Path albumDir = artistDir.resolve(folderName);
+        String rootStoragePath = ensureStoragePathEndsWithSlash(getAudioRelativePath());
+        String artistFolderName = sanitizeFileName(artist);
+        String artistStoragePath = rootStoragePath + artistFolderName + "/";
 
-        Files.createDirectories(albumDir);
+        Path artistDir = getAudioLibraryRoot().resolve(artistFolderName);
+        if (!Files.exists(artistDir)) {
+            fileServiceManager.createEmptyDirectory(rootStoragePath, artistFolderName);
+        } else {
+            ensureDirectoryMetadata(rootStoragePath, artistFolderName);
+        }
+
+        Path albumDir = artistDir.resolve(folderName);
+        String albumStoragePath = artistStoragePath + folderName + "/";
+        if (!Files.exists(albumDir)) {
+            fileServiceManager.createEmptyDirectory(artistStoragePath, folderName);
+        } else {
+            ensureDirectoryMetadata(artistStoragePath, folderName);
+        }
 
         String albumId = UUID.nameUUIDFromBytes((artist + "/" + folderName).getBytes(StandardCharsets.UTF_8)).toString();
 
@@ -403,8 +503,7 @@ public class AudioStorageService {
         boolean hasCover = false;
         if (cover != null && !cover.isEmpty()) {
             coverFilename = "cover.jpg";
-            Path coverPath = albumDir.resolve(coverFilename);
-            Files.copy(cover.getInputStream(), coverPath, StandardCopyOption.REPLACE_EXISTING);
+            saveOrUpdateFile(coverFilename, cover.getBytes(), cover.getContentType() != null ? cover.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
             hasCover = true;
         }
 
@@ -453,7 +552,14 @@ public class AudioStorageService {
         }
 
         Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
-        Files.createDirectories(albumDir);
+        String albumStoragePath = getStoragePathForAlbum(album);
+
+        // Ensure album directory exists
+        if (!Files.exists(albumDir)) {
+            String artistStoragePath = getStoragePathForArtist(album.getArtist());
+            String albumFolderName = albumDir.getFileName().toString();
+            fileServiceManager.createEmptyDirectory(artistStoragePath, albumFolderName);
+        }
 
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null || originalFilename.isBlank()) {
@@ -467,7 +573,24 @@ public class AudioStorageService {
         String sanitizedFilename = String.format("%02d - %s.%s", trackNum, sanitizeFileName(cleanTitle), ext);
         Path targetPath = albumDir.resolve(sanitizedFilename);
 
-        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+        // Remove any existing file or metadata with this sanitized name
+        try {
+            List<Metadata> existing = fileDBStorageService.loadByPathAndFilename(albumStoragePath, sanitizedFilename);
+            for (Metadata m : existing) {
+                fileServiceManager.delete(m);
+            }
+            Files.deleteIfExists(targetPath);
+        } catch (Exception ignored) {}
+
+        // Save file via FileServiceManager
+        byte[] fileBytes = file.getBytes();
+        BervanMockMultiPartFile trackPartFile = new BervanMockMultiPartFile(
+                sanitizedFilename,
+                sanitizedFilename,
+                file.getContentType() != null ? file.getContentType() : "audio/mpeg",
+                new ByteArrayInputStream(fileBytes)
+        );
+        fileServiceManager.save(trackPartFile, "Audio track: " + cleanTitle, albumStoragePath);
 
         String trackArtist = (overrideArtist != null && !overrideArtist.isBlank()) ? overrideArtist.trim() : album.getArtist();
         List<String> trackGenres = (overrideGenres != null && !overrideGenres.isEmpty()) ? overrideGenres : album.getGenres();
@@ -477,14 +600,22 @@ public class AudioStorageService {
         // Always write canonical ID3 tags to the MP3 file on disk
         if ("mp3".equalsIgnoreCase(ext)) {
             audioTagService.updateTags(targetPath.toFile(), cleanTitle, trackArtist, album.getTitle(), trackNum, album.getReleaseYear(), genreStr);
+            try {
+                long newSize = Files.size(targetPath);
+                List<Metadata> updatedMeta = fileDBStorageService.loadByPathAndFilename(albumStoragePath, sanitizedFilename);
+                if (!updatedMeta.isEmpty()) {
+                    Metadata m = updatedMeta.get(0);
+                    m.setFileSize(newSize);
+                    fileServiceManager.updateMetadata(m);
+                }
+            } catch (Exception ignored) {}
         }
 
         // If album has no cover yet, check if file had an embedded cover image
         if (!album.isHasCover()) {
             AudioTagService.TagInfo tagInfo = audioTagService.readTags(targetPath.toFile());
             if (tagInfo.albumImage() != null && tagInfo.albumImage().length > 0) {
-                Path coverDest = albumDir.resolve("cover.jpg");
-                Files.write(coverDest, tagInfo.albumImage());
+                saveOrUpdateFile("cover.jpg", tagInfo.albumImage(), "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
                 album.setCoverFilename("cover.jpg");
                 album.setHasCover(true);
             }
@@ -538,14 +669,45 @@ public class AudioStorageService {
         // Cascade rename / move folder on disk if artist or title changed
         if (artistChanged || titleOrYearChanged) {
             String folderName = album.isSingle() ? "Singles" : sanitizeFileName(newTitle + " (" + newYear + ")");
-            Path newArtistDir = getAudioLibraryRoot().resolve(sanitizeFileName(newArtist));
-            Files.createDirectories(newArtistDir);
+            String rootStoragePath = ensureStoragePathEndsWithSlash(getAudioRelativePath());
+            String newArtistFolderName = sanitizeFileName(newArtist);
+            String newArtistStoragePath = rootStoragePath + newArtistFolderName + "/";
+
+            Path newArtistDir = getAudioLibraryRoot().resolve(newArtistFolderName);
+            if (!Files.exists(newArtistDir)) {
+                fileServiceManager.createEmptyDirectory(rootStoragePath, newArtistFolderName);
+            }
             newAlbumDir = newArtistDir.resolve(folderName);
 
             if (!oldAlbumDir.equals(newAlbumDir)) {
-                Files.move(oldAlbumDir, newAlbumDir, StandardCopyOption.REPLACE_EXISTING);
+                String oldStoragePath = getStoragePathForAlbum(album);
+                fileDiskStorageService.moveFile(oldAlbumDir, newAlbumDir);
                 log.info("Moved album directory from {} to {}", oldAlbumDir, newAlbumDir);
                 album.setFolderPath(getAudioLibraryRoot().relativize(newAlbumDir).toString());
+                String newStoragePath = getStoragePathForAlbum(album);
+
+                // Update Metadata paths in database
+                try {
+                    Set<Metadata> oldMeta = fileDBStorageService.loadByPath(oldStoragePath);
+                    if (oldMeta != null) {
+                        for (Metadata m : oldMeta) {
+                            m.setPath(newStoragePath);
+                            fileServiceManager.updateMetadata(m);
+                        }
+                    }
+
+                    // Update album folder directory metadata
+                    String oldArtistStoragePath = getStoragePathForArtist(oldArtist);
+                    String oldFolderName = oldAlbumDir.getFileName().toString();
+                    List<Metadata> dirMeta = fileDBStorageService.loadByPathAndFilename(oldArtistStoragePath, oldFolderName);
+                    for (Metadata m : dirMeta) {
+                        m.setPath(newArtistStoragePath);
+                        m.setFilename(folderName);
+                        fileServiceManager.updateMetadata(m);
+                    }
+                } catch (Exception e) {
+                    log.warn("Could not migrate metadata paths: {}", e.getMessage());
+                }
 
                 // Clean up old artist directory if empty
                 Path oldArtistDir = oldAlbumDir.getParent();
@@ -553,6 +715,11 @@ public class AudioStorageService {
                     try (var stream = Files.list(oldArtistDir)) {
                         if (stream.findAny().isEmpty()) {
                             Files.deleteIfExists(oldArtistDir);
+                            String oldArtistFolderName = oldArtistDir.getFileName().toString();
+                            List<Metadata> artistMeta = fileDBStorageService.loadByPathAndFilename(rootStoragePath, oldArtistFolderName);
+                            for (Metadata am : artistMeta) {
+                                fileServiceManager.delete(am);
+                            }
                         }
                     } catch (Exception ignored) {}
                 }
@@ -650,6 +817,15 @@ public class AudioStorageService {
                     track.getYear() != null ? track.getYear() : album.getReleaseYear(),
                     track.getGenre()
             );
+            try {
+                String albumStoragePath = getStoragePathForAlbum(album);
+                List<Metadata> meta = fileDBStorageService.loadByPathAndFilename(albumStoragePath, track.getFilename());
+                if (!meta.isEmpty()) {
+                    Metadata m = meta.get(0);
+                    m.setFileSize(Files.size(trackFile));
+                    fileServiceManager.updateMetadata(m);
+                }
+            } catch (Exception ignored) {}
         }
 
         track.setHasTagMismatch(false);
@@ -677,6 +853,16 @@ public class AudioStorageService {
                 .orElse(null);
 
         if (track != null) {
+            String albumStoragePath = getStoragePathForAlbum(album);
+            try {
+                List<Metadata> metaList = fileDBStorageService.loadByPathAndFilename(albumStoragePath, track.getFilename());
+                for (Metadata m : metaList) {
+                    fileServiceManager.delete(m);
+                }
+            } catch (Exception e) {
+                log.warn("Could not delete track metadata from DB: {}", e.getMessage());
+            }
+
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
             Path trackFile = albumDir.resolve(track.getFilename());
             Files.deleteIfExists(trackFile);
@@ -701,6 +887,27 @@ public class AudioStorageService {
             }
 
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
+            String albumStoragePath = getStoragePathForAlbum(album);
+            String artistStoragePath = getStoragePathForArtist(album.getArtist());
+            String albumFolderName = albumDir.getFileName().toString();
+
+            try {
+                // Delete album folder metadata (which cascades to all contained files in DB)
+                List<Metadata> folderMeta = fileDBStorageService.loadByPathAndFilename(artistStoragePath, albumFolderName);
+                for (Metadata m : folderMeta) {
+                    fileServiceManager.delete(m);
+                }
+                // Also clean up any lingering file metadata in album folder
+                Set<Metadata> remainingMeta = fileDBStorageService.loadByPath(albumStoragePath);
+                if (remainingMeta != null) {
+                    for (Metadata m : remainingMeta) {
+                        fileServiceManager.delete(m);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Could not delete album metadata from DB: {}", e.getMessage());
+            }
+
             if (Files.exists(albumDir)) {
                 deleteDirectoryRecursively(albumDir);
                 log.info("Deleted album folder: {}", albumDir);
@@ -711,6 +918,12 @@ public class AudioStorageService {
                     try (var stream = Files.list(artistDir)) {
                         if (stream.findAny().isEmpty()) {
                             Files.deleteIfExists(artistDir);
+                            String rootStoragePath = ensureStoragePathEndsWithSlash(getAudioRelativePath());
+                            String artistFolderName = artistDir.getFileName().toString();
+                            List<Metadata> artistMeta = fileDBStorageService.loadByPathAndFilename(rootStoragePath, artistFolderName);
+                            for (Metadata am : artistMeta) {
+                                fileServiceManager.delete(am);
+                            }
                         }
                     } catch (Exception ignored) {}
                 }
@@ -756,9 +969,10 @@ public class AudioStorageService {
         if (album == null) throw new IllegalArgumentException("Album not found: " + albumId);
 
         Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
+        String albumStoragePath = getStoragePathForAlbum(album);
         String filename = "cover.jpg";
-        Path dest = albumDir.resolve(filename);
-        Files.copy(coverFile.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+        saveOrUpdateFile(filename, coverFile.getBytes(), coverFile.getContentType() != null ? coverFile.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
 
         album.setCoverFilename(filename);
         album.setHasCover(true);
@@ -769,7 +983,11 @@ public class AudioStorageService {
     public File getTrackFile(String trackId) {
         AudioTrack track = tracksById.get(trackId);
         if (track == null) return null;
-        Path path = getAudioLibraryRoot().resolve(track.getRelativePath());
+        String relativePath = track.getRelativePath().replace('\\', '/');
+        if (!relativePath.startsWith("/")) {
+            relativePath = "/" + relativePath;
+        }
+        Path path = fileDiskStorageService.getFile(getAudioRelativePath() + relativePath);
         File file = path.toFile();
         return file.exists() ? file : null;
     }
@@ -777,7 +995,11 @@ public class AudioStorageService {
     public File getCoverFile(String albumId) {
         AudioAlbum album = albumsById.get(albumId);
         if (album == null || !album.isHasCover() || album.getCoverFilename() == null) return null;
-        Path path = getAudioLibraryRoot().resolve(album.getFolderPath()).resolve(album.getCoverFilename());
+        String folderPath = album.getFolderPath().replace('\\', '/');
+        if (!folderPath.startsWith("/")) {
+            folderPath = "/" + folderPath;
+        }
+        Path path = fileDiskStorageService.getFile(getAudioRelativePath() + folderPath + "/" + album.getCoverFilename());
         File file = path.toFile();
         return file.exists() ? file : null;
     }
