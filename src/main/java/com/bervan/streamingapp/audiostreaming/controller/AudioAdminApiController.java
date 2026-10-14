@@ -239,14 +239,15 @@ public class AudioAdminApiController {
     }
 
     @PostMapping(value = "/upload-zip", consumes = "multipart/form-data")
-    public ResponseEntity<AudioAlbum> uploadZip(
+    public ResponseEntity<AudioZipImportResult> uploadZip(
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String artist,
-            @RequestParam(required = false) String albumTitle
+            @RequestParam(required = false) String albumTitle,
+            @RequestParam(defaultValue = "true") boolean autoSort
     ) {
         try {
-            AudioAlbum created = exportImportService.importZip(file, artist, albumTitle);
-            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+            AudioZipImportResult result = exportImportService.importZip(file, artist, albumTitle, autoSort);
+            return ResponseEntity.status(HttpStatus.CREATED).body(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
