@@ -25,6 +25,8 @@ public class AudioTrack {
     private Double durationSeconds;
     private Integer year;
     private String genre;
+    @Builder.Default
+    private List<String> genres = new ArrayList<>();
     private String filename;
     private String relativePath;
     private Long fileSize;

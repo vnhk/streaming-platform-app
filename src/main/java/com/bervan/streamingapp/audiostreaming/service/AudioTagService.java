@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class AudioTagService {
@@ -101,6 +105,34 @@ public class AudioTagService {
             log.warn("Could not read ID3 tags from {}: {}", file.getAbsolutePath(), e.getMessage());
             return new TagInfo(null, null, null, null, null, null, null, null, null, null);
         }
+    }
+
+    public static List<String> parseGenres(String genreStr) {
+        if (genreStr == null || genreStr.isBlank()) {
+            return new ArrayList<>();
+        }
+        return Arrays.stream(genreStr.split("[,/;|]"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    public static String formatGenresForTag(List<String> genres) {
+        if (genres == null || genres.isEmpty()) {
+            return null;
+        }
+        return genres.stream()
+                .filter(g -> g != null && !g.isBlank())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.joining(" / "));
+    }
+
+    public synchronized boolean updateTags(File file, String title, String artist, String album,
+                                           Integer trackNumber, Integer year, List<String> genres) {
+        String genreStr = formatGenresForTag(genres);
+        return updateTags(file, title, artist, album, trackNumber, year, genreStr);
     }
 
     public synchronized boolean updateTags(File file, String title, String artist, String album,

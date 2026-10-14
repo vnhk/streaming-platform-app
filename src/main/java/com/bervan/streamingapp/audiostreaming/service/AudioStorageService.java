@@ -193,6 +193,24 @@ public class AudioStorageService {
                 t -> t.getTrackNumber() != null ? t.getTrackNumber() : 999
         ));
 
+        Set<String> albumGenres = new LinkedHashSet<>(album.getGenres() != null ? album.getGenres() : List.of());
+        for (AudioTrack track : updatedTracks) {
+            if (track.getGenres() == null || track.getGenres().isEmpty()) {
+                if (track.getGenre() != null && !track.getGenre().isBlank()) {
+                    track.setGenres(AudioTagService.parseGenres(track.getGenre()));
+                } else if (!albumGenres.isEmpty()) {
+                    track.setGenres(new ArrayList<>(albumGenres));
+                    track.setGenre(AudioTagService.formatGenresForTag(new ArrayList<>(albumGenres)));
+                }
+            }
+            if (track.getGenres() != null) {
+                albumGenres.addAll(track.getGenres());
+            }
+        }
+        if (!albumGenres.isEmpty()) {
+            album.setGenres(new ArrayList<>(albumGenres));
+        }
+
         album.setTracks(updatedTracks);
         album.setTrackCount(updatedTracks.size());
         album.setTotalDurationSeconds(updatedTracks.stream().mapToDouble(t -> t.getDurationSeconds() != null ? t.getDurationSeconds() : 0.0).sum());
@@ -221,8 +239,10 @@ public class AudioStorageService {
         for (Path file : audioFiles.values()) {
             AudioTrack track = createTrackFromFile(file.toFile(), albumPath, artistDirName, albumTitle, trackIndex++);
             tracks.add(track);
-            if (track.getGenre() != null && !track.getGenre().isBlank()) {
-                albumGenres.add(track.getGenre());
+            if (track.getGenres() != null && !track.getGenres().isEmpty()) {
+                albumGenres.addAll(track.getGenres());
+            } else if (track.getGenre() != null && !track.getGenre().isBlank()) {
+                albumGenres.addAll(AudioTagService.parseGenres(track.getGenre()));
             }
             if (extractedCover == null) {
                 AudioTagService.TagInfo tagInfo = audioTagService.readTags(file.toFile());
@@ -276,7 +296,13 @@ public class AudioStorageService {
         String albumName = tags.album() != null ? tags.album() : defaultAlbum;
         Integer trackNum = tags.trackNumber() != null ? tags.trackNumber() : defaultTrackNum;
         Integer year = tags.year();
-        String genre = tags.genre() != null ? tags.genre() : "Unknown";
+
+        List<String> trackGenres = AudioTagService.parseGenres(tags.genre());
+        if (trackGenres.isEmpty()) {
+            trackGenres = new ArrayList<>(List.of("Unknown"));
+        }
+        String genre = AudioTagService.formatGenresForTag(trackGenres);
+        if (genre == null) genre = "Unknown";
 
         String relativePath = getAudioLibraryRoot().relativize(file.toPath()).toString();
         String trackId = UUID.nameUUIDFromBytes(relativePath.getBytes(StandardCharsets.UTF_8)).toString();
@@ -293,6 +319,7 @@ public class AudioStorageService {
                 .durationSeconds(tags.durationSeconds() != null ? tags.durationSeconds() : 0.0)
                 .year(year)
                 .genre(genre)
+                .genres(trackGenres)
                 .filename(file.getName())
                 .relativePath(relativePath)
                 .fileSize(file.length())
@@ -409,6 +436,17 @@ public class AudioStorageService {
 
     public synchronized AudioTrack addTrack(String albumId, MultipartFile file, String overrideTitle,
                                            String overrideArtist, Integer overrideTrackNum) throws Exception {
+        return addTrack(albumId, file, overrideTitle, overrideArtist, overrideTrackNum, (List<String>) null);
+    }
+
+    public synchronized AudioTrack addTrack(String albumId, MultipartFile file, String overrideTitle,
+                                           String overrideArtist, Integer overrideTrackNum, String overrideGenres) throws Exception {
+        List<String> parsed = overrideGenres != null ? AudioTagService.parseGenres(overrideGenres) : null;
+        return addTrack(albumId, file, overrideTitle, overrideArtist, overrideTrackNum, parsed);
+    }
+
+    public synchronized AudioTrack addTrack(String albumId, MultipartFile file, String overrideTitle,
+                                           String overrideArtist, Integer overrideTrackNum, List<String> overrideGenres) throws Exception {
         AudioAlbum album = albumsById.get(albumId);
         if (album == null) {
             throw new IllegalArgumentException("Album not found with ID: " + albumId);
@@ -432,11 +470,13 @@ public class AudioStorageService {
         Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
         String trackArtist = (overrideArtist != null && !overrideArtist.isBlank()) ? overrideArtist.trim() : album.getArtist();
-        String genre = (album.getGenres() != null && !album.getGenres().isEmpty()) ? album.getGenres().get(0) : "Unknown";
+        List<String> trackGenres = (overrideGenres != null && !overrideGenres.isEmpty()) ? overrideGenres : album.getGenres();
+        String genreStr = AudioTagService.formatGenresForTag(trackGenres);
+        if (genreStr == null) genreStr = "Unknown";
 
         // Always write canonical ID3 tags to the MP3 file on disk
         if ("mp3".equalsIgnoreCase(ext)) {
-            audioTagService.updateTags(targetPath.toFile(), cleanTitle, trackArtist, album.getTitle(), trackNum, album.getReleaseYear(), genre);
+            audioTagService.updateTags(targetPath.toFile(), cleanTitle, trackArtist, album.getTitle(), trackNum, album.getReleaseYear(), genreStr);
         }
 
         // If album has no cover yet, check if file had an embedded cover image
@@ -451,10 +491,21 @@ public class AudioStorageService {
         }
 
         AudioTrack newTrack = createTrackFromFile(targetPath.toFile(), albumDir, album.getArtist(), album.getTitle(), trackNum);
+        if (overrideGenres != null && !overrideGenres.isEmpty()) {
+            newTrack.setGenres(new ArrayList<>(overrideGenres));
+            newTrack.setGenre(genreStr);
+        }
         album.getTracks().add(newTrack);
         album.getTracks().sort(Comparator.comparing(t -> t.getTrackNumber() != null ? t.getTrackNumber() : 999));
         album.setTrackCount(album.getTracks().size());
         album.setTotalDurationSeconds(album.getTracks().stream().mapToDouble(t -> t.getDurationSeconds() != null ? t.getDurationSeconds() : 0.0).sum());
+
+        // Keep album genres in sync
+        Set<String> allAlbumGenres = new LinkedHashSet<>(album.getGenres() != null ? album.getGenres() : List.of());
+        if (newTrack.getGenres() != null) {
+            allAlbumGenres.addAll(newTrack.getGenres());
+        }
+        album.setGenres(new ArrayList<>(allAlbumGenres));
 
         saveAlbumJson(album, albumDir);
         generateM3u8Playlist(album, albumDir);
@@ -476,7 +527,8 @@ public class AudioStorageService {
         String newTitle = (request.getTitle() != null && !request.getTitle().isBlank()) ? request.getTitle().trim() : oldTitle;
         Integer newYear = request.getReleaseYear() != null ? request.getReleaseYear() : album.getReleaseYear();
         List<String> newGenres = request.getGenres() != null ? request.getGenres() : album.getGenres();
-        String mainGenre = (newGenres != null && !newGenres.isEmpty()) ? newGenres.get(0) : "Unknown";
+        String genreTagStr = AudioTagService.formatGenresForTag(newGenres);
+        if (genreTagStr == null) genreTagStr = "Unknown";
 
         boolean artistChanged = !oldArtist.equalsIgnoreCase(newArtist);
         boolean titleOrYearChanged = !oldTitle.equalsIgnoreCase(newTitle) || !Objects.equals(album.getReleaseYear(), newYear);
@@ -518,12 +570,13 @@ public class AudioStorageService {
                         newTitle,
                         track.getTrackNumber(),
                         newYear,
-                        mainGenre
+                        genreTagStr
                 );
             }
             track.setAlbum(newTitle);
             track.setYear(newYear);
-            track.setGenre(mainGenre);
+            track.setGenre(genreTagStr);
+            track.setGenres(newGenres != null ? new ArrayList<>(newGenres) : new ArrayList<>());
             if (artistChanged) {
                 track.setArtist(newArtist);
                 track.setArtists(List.of(newArtist));
@@ -569,7 +622,22 @@ public class AudioStorageService {
         }
         if (request.getTrackNumber() != null) track.setTrackNumber(request.getTrackNumber());
         if (request.getYear() != null) track.setYear(request.getYear());
-        if (request.getGenre() != null && !request.getGenre().isBlank()) track.setGenre(request.getGenre().trim());
+
+        if (request.getGenres() != null && !request.getGenres().isEmpty()) {
+            track.setGenres(new ArrayList<>(request.getGenres()));
+            track.setGenre(AudioTagService.formatGenresForTag(request.getGenres()));
+        } else if (request.getGenre() != null && !request.getGenre().isBlank()) {
+            List<String> parsed = AudioTagService.parseGenres(request.getGenre());
+            track.setGenres(parsed);
+            track.setGenre(AudioTagService.formatGenresForTag(parsed));
+        }
+
+        // Aggregate newly added track genres to album.getGenres()
+        Set<String> allAlbumGenres = new LinkedHashSet<>(album.getGenres() != null ? album.getGenres() : List.of());
+        if (track.getGenres() != null) {
+            allAlbumGenres.addAll(track.getGenres());
+        }
+        album.setGenres(new ArrayList<>(allAlbumGenres));
 
         // Update ID3 tags in physical file
         if (Files.exists(trackFile) && trackFile.toString().toLowerCase().endsWith(".mp3")) {
@@ -736,7 +804,13 @@ public class AudioStorageService {
                         if (!matchesAlbum && !matchesTrack) return false;
                     }
                     if (genre != null && !genre.isBlank()) {
-                        if (a.getGenres() == null || a.getGenres().stream().noneMatch(g -> g.equalsIgnoreCase(genre.trim()))) {
+                        String gLower = genre.trim().toLowerCase();
+                        boolean albumMatches = a.getGenres() != null && a.getGenres().stream().anyMatch(g -> g.equalsIgnoreCase(genre.trim()));
+                        boolean trackMatches = a.getTracks().stream().anyMatch(t ->
+                                (t.getGenres() != null && t.getGenres().stream().anyMatch(tg -> tg.equalsIgnoreCase(genre.trim()))) ||
+                                (t.getGenre() != null && t.getGenre().toLowerCase().contains(gLower))
+                        );
+                        if (!albumMatches && !trackMatches) {
                             return false;
                         }
                     }
@@ -756,10 +830,18 @@ public class AudioStorageService {
                 .sorted(Comparator.comparing(AudioAlbum::getTitle, String.CASE_INSENSITIVE_ORDER))
                 .collect(Collectors.toList());
 
-        Set<String> distinctGenres = albumsById.values().stream()
-                .flatMap(a -> a.getGenres().stream())
-                .filter(g -> g != null && !g.isBlank())
-                .collect(Collectors.toCollection(TreeSet::new));
+        Set<String> distinctGenres = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (AudioAlbum a : albumsById.values()) {
+            if (a.getGenres() != null) {
+                distinctGenres.addAll(a.getGenres());
+            }
+            for (AudioTrack t : a.getTracks()) {
+                if (t.getGenres() != null) {
+                    distinctGenres.addAll(t.getGenres());
+                }
+            }
+        }
+        distinctGenres.removeIf(String::isBlank);
 
         Set<String> distinctArtists = albumsById.values().stream()
                 .map(AudioAlbum::getArtist)

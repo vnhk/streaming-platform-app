@@ -130,10 +130,13 @@ public class AudioAdminApiController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String artist,
-            @RequestParam(required = false) Integer trackNumber
+            @RequestParam(required = false) Integer trackNumber,
+            @RequestParam(required = false) String genres,
+            @RequestParam(required = false) String genre
     ) {
         try {
-            AudioTrack track = storageService.addTrack(albumId, file, title, artist, trackNumber);
+            String genresInput = (genres != null && !genres.isBlank()) ? genres : genre;
+            AudioTrack track = storageService.addTrack(albumId, file, title, artist, trackNumber, genresInput);
             return ResponseEntity.status(HttpStatus.CREATED).body(track);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
@@ -149,10 +152,16 @@ public class AudioAdminApiController {
             @RequestParam(required = false) String artist,
             @RequestParam(required = false) String album,
             @RequestParam(required = false) String genre,
+            @RequestParam(required = false) String genres,
             @RequestParam(required = false) Integer trackNumber,
             @RequestParam(defaultValue = "false") boolean isSingle
     ) {
         try {
+            String genresInput = (genres != null && !genres.isBlank()) ? genres : genre;
+            List<String> parsedGenres = (genresInput != null && !genresInput.isBlank())
+                    ? AudioTagService.parseGenres(genresInput)
+                    : null;
+
             // Find existing album or create one
             String targetArtist = (artist != null && !artist.isBlank()) ? artist.trim() : null;
             String targetAlbum = (album != null && !album.isBlank()) ? album.trim() : null;
@@ -164,6 +173,9 @@ public class AudioAdminApiController {
                 AudioTagService.TagInfo info = tagService.readTags(tempFile);
                 if (targetArtist == null) targetArtist = info.artist();
                 if (targetAlbum == null) targetAlbum = info.album();
+                if (parsedGenres == null && info.genre() != null) {
+                    parsedGenres = AudioTagService.parseGenres(info.genre());
+                }
                 tempFile.delete();
             }
 
@@ -183,12 +195,12 @@ public class AudioAdminApiController {
                 target = storageService.createAlbum(CreateAlbumRequest.builder()
                         .artist(targetArtist)
                         .title(targetAlbum)
-                        .genres(genre != null && !genre.isBlank() ? List.of(genre) : List.of("Unknown"))
+                        .genres(parsedGenres != null && !parsedGenres.isEmpty() ? parsedGenres : List.of("Unknown"))
                         .isSingle(isSingle)
                         .build(), null);
             }
 
-            AudioTrack track = storageService.addTrack(target.getId(), file, title, targetArtist, trackNumber);
+            AudioTrack track = storageService.addTrack(target.getId(), file, title, targetArtist, trackNumber, parsedGenres);
             return ResponseEntity.status(HttpStatus.CREATED).body(track);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

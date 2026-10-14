@@ -18,4 +18,5 @@ public class UpdateTrackRequest {
     private Integer trackNumber;
     private Integer year;
     private String genre;
+    private List<String> genres;
 }
