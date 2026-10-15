@@ -1,5 +1,6 @@
 package com.bervan.streamingapp.audiostreaming.controller;
 
+import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.audiostreaming.model.*;
 import com.bervan.streamingapp.audiostreaming.service.*;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/audio/admin")
 public class AudioAdminApiController {
+    private final JsonLogger log = JsonLogger.getLogger(getClass(), "audio-streaming");
     private final AudioStorageService storageService;
     private final AudioExportImportService exportImportService;
     private final AudioAiMetadataService aiMetadataService;
@@ -245,13 +247,25 @@ public class AudioAdminApiController {
             @RequestParam(required = false) String albumTitle,
             @RequestParam(defaultValue = "true") boolean autoSort
     ) {
+        String filename = file != null ? file.getOriginalFilename() : "null";
+        long size = file != null ? file.getSize() : 0;
+        log.info("Received ZIP upload request: filename='{}', size={} bytes, artist='{}', album='{}', autoSort={}",
+                filename, size, artist, albumTitle, autoSort);
         try {
             AudioZipImportResult result = exportImportService.importZip(file, artist, albumTitle, autoSort);
+            log.info("ZIP upload finished successfully for '{}'. Imported {} tracks across {} album(s)",
+                    filename, result.getImportedTracksCount(), result.getAlbumsCount());
             return ResponseEntity.status(HttpStatus.CREATED).body(result);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            log.error("Invalid ZIP upload argument for file '" + filename + "': " + e.getMessage(), e);
+            return ResponseEntity.badRequest().body(AudioZipImportResult.builder()
+                    .message(e.getMessage())
+                    .build());
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            log.error("ZIP upload failed for file '" + filename + "': " + e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(AudioZipImportResult.builder()
+                    .message("Failed to import ZIP: " + e.getMessage())
+                    .build());
         }
     }
 }

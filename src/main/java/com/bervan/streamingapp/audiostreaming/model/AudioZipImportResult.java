@@ -17,6 +17,7 @@ public class AudioZipImportResult {
     private int importedTracksCount;
     private int albumsCount;
     private List<String> affectedAlbumTitles;
+    private List<String> failedTracks;
     private AudioAlbum primaryAlbum;
     private String message;
 }
