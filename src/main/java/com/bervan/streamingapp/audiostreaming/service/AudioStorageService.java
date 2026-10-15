@@ -823,6 +823,8 @@ public class AudioStorageService {
             }
             if (resp.getDescription() != null && !resp.getDescription().isBlank()) {
                 album.setDescription(resp.getDescription());
+            } else if (album.getDescription() != null && album.getDescription().startsWith("Imported from ZIP")) {
+                album.setDescription("");
             }
 
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());

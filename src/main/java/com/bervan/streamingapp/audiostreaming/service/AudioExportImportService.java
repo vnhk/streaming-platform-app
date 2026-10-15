@@ -369,7 +369,7 @@ public class AudioExportImportService {
                             .releaseYear(releaseYear)
                             .genres(trackGenres)
                             .artists(List.of(artist))
-                            .description("Imported from ZIP (auto-sorted)")
+                            .description("")
                             .isSingle(isSingle)
                             .build();
 
@@ -445,6 +445,7 @@ public class AudioExportImportService {
         String albumTitle = optionalAlbumTitle != null && !optionalAlbumTitle.isBlank() ? optionalAlbumTitle.trim() : null;
         Integer releaseYear = null;
         String genre = "Unknown";
+        String albumDescription = "";
 
         // Inspect first few files for ID3 tags
         for (Path audioPath : extractedAudioFiles) {
@@ -475,6 +476,9 @@ public class AudioExportImportService {
                 if ((genre == null || "Unknown".equalsIgnoreCase(genre)) && aiResp.getGenres() != null && !aiResp.getGenres().isEmpty()) {
                     genre = aiResp.getGenres().get(0);
                 }
+                if (aiResp.getDescription() != null && !aiResp.getDescription().isBlank()) {
+                    albumDescription = aiResp.getDescription().trim();
+                }
                 log.info("AI enrichment result: artist='{}', albumTitle='{}', releaseYear={}, genre='{}'",
                         artist, albumTitle, releaseYear, genre);
             } catch (Exception e) {
@@ -501,7 +505,7 @@ public class AudioExportImportService {
                 .releaseYear(releaseYear)
                 .genres(List.of(genre))
                 .artists(List.of(artist))
-                .description("Imported from ZIP: " + zipFile.getOriginalFilename())
+                .description(albumDescription)
                 .isSingle(false)
                 .build();
 
