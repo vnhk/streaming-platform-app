@@ -253,8 +253,13 @@ public class AudioAdminApiController {
                 filename, size, artist, albumTitle, autoSort);
         try {
             AudioZipImportResult result = exportImportService.importZip(file, artist, albumTitle, autoSort);
-            log.info("ZIP upload finished successfully for '{}'. Imported {} tracks across {} album(s)",
-                    filename, result.getImportedTracksCount(), result.getAlbumsCount());
+            if (result.getFailedTracks() != null && !result.getFailedTracks().isEmpty()) {
+                log.warn("ZIP upload '{}' completed with {} warning(s). Failed tracks:\n - {}",
+                        filename, result.getFailedTracks().size(), String.join("\n - ", result.getFailedTracks()));
+            } else {
+                log.info("ZIP upload finished successfully for '{}'. Imported {} tracks across {} album(s)",
+                        filename, result.getImportedTracksCount(), result.getAlbumsCount());
+            }
             return ResponseEntity.status(HttpStatus.CREATED).body(result);
         } catch (IllegalArgumentException e) {
             log.error("Invalid ZIP upload argument for file '" + filename + "': " + e.getMessage(), e);

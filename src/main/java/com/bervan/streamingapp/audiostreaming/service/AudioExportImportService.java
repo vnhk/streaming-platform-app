@@ -333,9 +333,12 @@ public class AudioExportImportService {
 
         String summaryMsg = String.format("Successfully auto-sorted %d tracks across %d album(s)", importedCount, targetAlbums.size());
         if (!failedTracks.isEmpty()) {
-            summaryMsg += String.format(" (%d track(s) failed)", failedTracks.size());
+            summaryMsg += String.format(" (%d track(s) failed: %s)", failedTracks.size(), String.join(", ", failedTracks));
+            log.warn("Auto-sort ZIP import completed with {} failed track(s):\n - {}",
+                    failedTracks.size(), String.join("\n - ", failedTracks));
+        } else {
+            log.info("Auto-sort ZIP import complete: {}", summaryMsg);
         }
-        log.info("Auto-sort ZIP import complete: {}", summaryMsg);
 
         return AudioZipImportResult.builder()
                 .importedTracksCount(importedCount)
@@ -461,9 +464,12 @@ public class AudioExportImportService {
         AudioAlbum refreshed = storageService.getAlbumById(album.getId()).orElse(album);
         String summaryMsg = String.format("Successfully imported album '%s' with %d tracks", refreshed.getTitle(), importedCount);
         if (!failedTracks.isEmpty()) {
-            summaryMsg += String.format(" (%d track(s) failed)", failedTracks.size());
+            summaryMsg += String.format(" (%d track(s) failed: %s)", failedTracks.size(), String.join(", ", failedTracks));
+            log.warn("Single-album ZIP import completed with {} failed track(s):\n - {}",
+                    failedTracks.size(), String.join("\n - ", failedTracks));
+        } else {
+            log.info("Single-album ZIP import complete: {}", summaryMsg);
         }
-        log.info("Single-album ZIP import complete: {}", summaryMsg);
 
         return AudioZipImportResult.builder()
                 .importedTracksCount(importedCount)
