@@ -110,6 +110,8 @@ public class AudioAiMetadataService {
 
         try {
             String filenamesListStr = String.join("\n", filenames);
+            String effectiveAlbum = (albumTitle.isBlank() || "Singles".equalsIgnoreCase(albumTitle))
+                    ? "Unknown (determine canonical studio album from tracks)" : albumTitle;
             String prompt = String.format("""
                     Given the following music information:
                     Artist: %s
@@ -117,9 +119,12 @@ public class AudioAiMetadataService {
                     Track files:
                     %s
 
+                    Identify the official canonical studio album name (e.g. for Linkin Park - Numb, the albumTitle MUST be "Meteora", not "Singles").
+                    Only use "Singles" if the tracks were truly released solely as standalone non-album singles.
+
                     Generate a JSON object with this exact structure:
                     {
-                      "albumTitle": "<official or cleaned album title>",
+                      "albumTitle": "<canonical studio album or single title>",
                       "artist": "<main artist name>",
                       "artists": ["<primary artist>", "<collaborator/featured artist if any>"],
                       "releaseYear": <4-digit integer release year or null>,
@@ -137,7 +142,7 @@ public class AudioAiMetadataService {
                     Return ONLY valid JSON without any markdown formatting or commentary.
                     """,
                     artist.isEmpty() ? "Unknown" : artist,
-                    albumTitle.isEmpty() ? "Unknown" : albumTitle,
+                    effectiveAlbum,
                     filenamesListStr.isEmpty() ? "(none provided)" : filenamesListStr
             );
 
@@ -240,7 +245,7 @@ public class AudioAiMetadataService {
                 }
 
                 String prompt = String.format("""
-                        Given the following music tracks, identify their official artist name, album name (or 'Singles' if an independent single or not from a standard studio album), clean official song title, release year, and 1 to 3 music genres.
+                        Given the following music tracks, identify their official artist name, canonical studio album name that the track originally appeared on (for example, for Linkin Park - Numb, the album MUST be "Meteora"; only return "Singles" if the song was truly an independent standalone single never released on a studio album), clean official song title, release year (4-digit integer), and 1 to 3 music genres.
                         Return ONLY a valid JSON array of objects with keys: id (number), artist (string), album (string), title (string), releaseYear (number or null), genres (array of strings).
                         Do NOT include markdown formatting, backticks, or any explanation.
 

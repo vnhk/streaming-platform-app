@@ -827,6 +827,15 @@ public class AudioStorageService {
                 album.setDescription("");
             }
 
+            boolean shouldRename = album.getTracks().size() == 1 &&
+                    ("Singles".equalsIgnoreCase(album.getTitle()) || "Unknown Album".equalsIgnoreCase(album.getTitle())) &&
+                    resp.getAlbumTitle() != null && !resp.getAlbumTitle().isBlank() && !"Singles".equalsIgnoreCase(resp.getAlbumTitle());
+            if (shouldRename) {
+                log.info("AI enrichment updated album title from '{}' to canonical album '{}'", album.getTitle(), resp.getAlbumTitle().trim());
+                album.setTitle(resp.getAlbumTitle().trim());
+                album.setSingle(false);
+            }
+
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
             String genreTagStr = AudioTagService.formatGenresForTag(album.getGenres());
 
