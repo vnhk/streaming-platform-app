@@ -319,7 +319,7 @@ public class AudioExportImportService {
                         rawFileName,
                         rawFileName,
                         mimeType,
-                        bytes
+                        new ByteArrayInputStream(bytes)
                 );
 
                 storageService.addTrack(album.getId(), multipart, trackTitle, artist, trackNum, trackGenres);
@@ -445,7 +445,7 @@ public class AudioExportImportService {
                         rawFileName,
                         rawFileName,
                         mimeType,
-                        bytes
+                        new ByteArrayInputStream(bytes)
                 );
 
                 storageService.addTrack(album.getId(), multipart, trackTitle, artist, num);

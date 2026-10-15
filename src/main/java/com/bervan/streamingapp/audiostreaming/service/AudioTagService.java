@@ -6,12 +6,11 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -158,7 +157,7 @@ public class AudioTagService {
             if (album != null) id3v2Tag.setAlbum(album);
             if (trackNumber != null) id3v2Tag.setTrack(String.valueOf(trackNumber));
             if (year != null) id3v2Tag.setYear(String.valueOf(year));
-            if (genre != null && !genre.isBlank()) id3v2Tag.setGenreDescription(genre);
+            setSafeGenre(id3v2Tag, genre);
 
             tempPath = Files.createTempFile("mp3_tag_", ".mp3");
             mp3file.save(tempPath.toAbsolutePath().toString());
@@ -174,6 +173,42 @@ public class AudioTagService {
                 } catch (IOException ignored) {}
             }
             return false;
+        }
+    }
+
+    private void setSafeGenre(ID3v2 id3v2Tag, String genre) {
+        if (genre == null || genre.isBlank()) {
+            return;
+        }
+        try {
+            id3v2Tag.setGenreDescription(genre);
+        } catch (IllegalArgumentException e) {
+            // mp3agic's ID3v23Tag / AbstractID3v2Tag only recognizes standard ID3v1 genre names.
+            // Custom or modern genres (e.g. "Music", "Indie Rock", "Synthwave", multi-genre) cause IllegalArgumentException.
+            // ID3v2 TCON frame standardly supports arbitrary UTF-8 text.
+            try {
+                byte[] textBytes = genre.getBytes(StandardCharsets.UTF_8);
+                byte[] frameData = new byte[textBytes.length + 1];
+                frameData[0] = 3; // Encoding flag: 3 = UTF-8 in ID3v2
+                System.arraycopy(textBytes, 0, frameData, 1, textBytes.length);
+
+                ID3v2Frame frame = new ID3v2Frame("TCON", frameData);
+                Map<String, ID3v2FrameSet> frameSets = id3v2Tag.getFrameSets();
+                if (frameSets != null) {
+                    ID3v2FrameSet frameSet = frameSets.get("TCON");
+                    if (frameSet == null) {
+                        frameSet = new ID3v2FrameSet("TCON");
+                        frameSets.put("TCON", frameSet);
+                    }
+                    frameSet.clear();
+                    frameSet.addFrame(frame);
+                }
+            } catch (Exception ex) {
+                log.warn("Could not set custom genre frame for '{}': {}", genre, ex.getMessage());
+                try {
+                    id3v2Tag.setGenre(12); // Fallback: ID3v1 "Other"
+                } catch (Exception ignored) {}
+            }
         }
     }
 

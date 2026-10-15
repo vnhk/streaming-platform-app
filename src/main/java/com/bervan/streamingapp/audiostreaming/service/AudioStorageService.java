@@ -617,7 +617,7 @@ public class AudioStorageService {
                 sanitizedFilename,
                 sanitizedFilename,
                 file.getContentType() != null ? file.getContentType() : "audio/mpeg",
-                fileBytes
+                new ByteArrayInputStream(fileBytes)
         );
         fileServiceManager.save(trackPartFile, "Audio track: " + cleanTitle, albumStoragePath);
 
