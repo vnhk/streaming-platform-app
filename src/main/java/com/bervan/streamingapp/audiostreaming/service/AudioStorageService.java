@@ -799,6 +799,68 @@ public class AudioStorageService {
         return album;
     }
 
+    public synchronized AudioAlbum aiEnrichAlbum(String albumId) {
+        AudioAlbum album = albumsById.get(albumId);
+        if (album == null) throw new IllegalArgumentException("Album not found: " + albumId);
+
+        List<String> filenames = album.getTracks().stream().map(AudioTrack::getFilename).toList();
+        AiEnrichResponse resp = aiMetadataService.enrichAlbum(AiEnrichRequest.builder()
+                .artist(album.getArtist())
+                .albumTitle(album.getTitle())
+                .trackFilenames(filenames)
+                .build());
+
+        if (resp != null) {
+            List<String> enrichedGenres = resp.getGenres() != null ? resp.getGenres().stream()
+                    .filter(g -> g != null && !g.isBlank() && !"Unknown".equalsIgnoreCase(g.trim()))
+                    .toList() : List.of();
+
+            if (!enrichedGenres.isEmpty()) {
+                album.setGenres(new ArrayList<>(enrichedGenres));
+            }
+            if (resp.getReleaseYear() != null) {
+                album.setReleaseYear(resp.getReleaseYear());
+            }
+            if (resp.getDescription() != null && !resp.getDescription().isBlank()) {
+                album.setDescription(resp.getDescription());
+            }
+
+            Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
+            String genreTagStr = AudioTagService.formatGenresForTag(album.getGenres());
+
+            for (AudioTrack track : album.getTracks()) {
+                if (track.getGenres() == null || track.getGenres().isEmpty() || track.getGenres().contains("Unknown")) {
+                    if (!enrichedGenres.isEmpty()) {
+                        track.setGenres(new ArrayList<>(enrichedGenres));
+                        track.setGenre(genreTagStr);
+                    }
+                }
+                if (track.getYear() == null && album.getReleaseYear() != null) {
+                    track.setYear(album.getReleaseYear());
+                }
+
+                Path trackFile = albumDir.resolve(track.getFilename());
+                if (Files.exists(trackFile) && trackFile.toString().toLowerCase().endsWith(".mp3")) {
+                    audioTagService.updateTags(
+                            trackFile.toFile(),
+                            track.getTitle(),
+                            track.getArtist(),
+                            album.getTitle(),
+                            track.getTrackNumber(),
+                            track.getYear(),
+                            track.getGenre()
+                    );
+                }
+            }
+
+            saveAlbumJson(album, albumDir);
+            generateM3u8Playlist(album, albumDir);
+            log.info("AI enrichment complete for album '{}' by '{}': genres={}, year={}",
+                    album.getTitle(), album.getArtist(), album.getGenres(), album.getReleaseYear());
+        }
+        return album;
+    }
+
     public synchronized AudioTrack updateTrack(String albumId, String trackId, UpdateTrackRequest request) {
         AudioAlbum album = albumsById.get(albumId);
         if (album == null) throw new IllegalArgumentException("Album not found: " + albumId);

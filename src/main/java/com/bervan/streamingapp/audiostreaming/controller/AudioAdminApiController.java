@@ -245,14 +245,15 @@ public class AudioAdminApiController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String artist,
             @RequestParam(required = false) String albumTitle,
-            @RequestParam(defaultValue = "true") boolean autoSort
+            @RequestParam(defaultValue = "true") boolean autoSort,
+            @RequestParam(defaultValue = "false") boolean useAi
     ) {
         String filename = file != null ? file.getOriginalFilename() : "null";
         long size = file != null ? file.getSize() : 0;
-        log.info("Received ZIP upload request: filename='{}', size={} bytes, artist='{}', album='{}', autoSort={}",
-                filename, size, artist, albumTitle, autoSort);
+        log.info("Received ZIP upload request: filename='{}', size={} bytes, artist='{}', album='{}', autoSort={}, useAi={}",
+                filename, size, artist, albumTitle, autoSort, useAi);
         try {
-            AudioZipImportResult result = exportImportService.importZip(file, artist, albumTitle, autoSort);
+            AudioZipImportResult result = exportImportService.importZip(file, artist, albumTitle, autoSort, useAi);
             if (result.getFailedTracks() != null && !result.getFailedTracks().isEmpty()) {
                 log.warn("ZIP upload '{}' completed with {} warning(s). Failed tracks:\n - {}",
                         filename, result.getFailedTracks().size(), String.join("\n - ", result.getFailedTracks()));
@@ -271,6 +272,19 @@ public class AudioAdminApiController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(AudioZipImportResult.builder()
                     .message("Failed to import ZIP: " + e.getMessage())
                     .build());
+        }
+    }
+
+    @PostMapping("/albums/{albumId}/ai-enrich")
+    public ResponseEntity<AudioAlbum> aiEnrichAlbum(@PathVariable String albumId) {
+        try {
+            AudioAlbum enriched = storageService.aiEnrichAlbum(albumId);
+            return ResponseEntity.ok(enriched);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Failed to AI-enrich album " + albumId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

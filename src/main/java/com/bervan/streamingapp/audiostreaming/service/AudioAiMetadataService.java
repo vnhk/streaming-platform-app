@@ -5,12 +5,19 @@ import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.audiostreaming.model.AiEnrichRequest;
 import com.bervan.streamingapp.audiostreaming.model.AiEnrichResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AudioAiMetadataService {
@@ -21,11 +28,71 @@ public class AudioAiMetadataService {
     @Value("${openai.api.key:}")
     private String openAiApiKey;
 
+    private final Map<String, List<String>> genreCache = new ConcurrentHashMap<>();
+
     public AudioAiMetadataService() {
         this.openAIService = new OpenAIService(
                 "You are an expert music metadata curator. You provide accurate music album and track metadata " +
                         "including release year, genres, descriptions, artists, and clean track titles in valid JSON format."
         );
+    }
+
+    public List<String> detectGenres(String artist, String titleOrAlbum) {
+        String cleanArtist = artist != null ? artist.trim() : "";
+        String cleanTitle = titleOrAlbum != null ? titleOrAlbum.trim() : "";
+
+        if (cleanArtist.isBlank() && cleanTitle.isBlank()) {
+            return List.of();
+        }
+
+        String cacheKey = (cleanArtist.toLowerCase() + "|||" + cleanTitle.toLowerCase());
+        if (genreCache.containsKey(cacheKey)) {
+            return genreCache.get(cacheKey);
+        }
+
+        String artistKey = cleanArtist.toLowerCase() + "|||*";
+        if (cleanTitle.isBlank() && genreCache.containsKey(artistKey)) {
+            return genreCache.get(artistKey);
+        }
+
+        if (openAiApiKey == null || openAiApiKey.isBlank()) {
+            log.debug("OpenAI API key missing or empty. Skipping genre detection for '{} - {}'", cleanArtist, cleanTitle);
+            return List.of();
+        }
+
+        try {
+            log.info("Querying AI for genres of '{} - {}'", cleanArtist, cleanTitle);
+            String prompt = String.format("""
+                    Identify the main music genres for artist "%s" and track/album "%s".
+                    Return ONLY a JSON array with 1 to 3 genre names (e.g. ["Baroque Pop", "Art Pop", "Indie Rock"]).
+                    Do NOT include markdown fences, backticks, or any additional text.
+                    """, cleanArtist.isEmpty() ? "Unknown" : cleanArtist, cleanTitle.isEmpty() ? "Unknown" : cleanTitle);
+
+            String response = openAIService.askAI(prompt, OpenAIService.GPT_4O_MINI, 0.2, openAiApiKey);
+            if (response != null && !response.isBlank()) {
+                String cleaned = cleanJsonResponse(response);
+                List<String> parsed = objectMapper.readValue(cleaned, objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                if (parsed != null && !parsed.isEmpty()) {
+                    List<String> valid = parsed.stream()
+                            .filter(g -> g != null && !g.isBlank() && !"Unknown".equalsIgnoreCase(g.trim()))
+                            .map(String::trim)
+                            .distinct()
+                            .toList();
+                    if (!valid.isEmpty()) {
+                        genreCache.put(cacheKey, valid);
+                        if (!cleanArtist.isBlank()) {
+                            genreCache.putIfAbsent(artistKey, valid);
+                        }
+                        log.info("AI detected genres for '{} - {}': {}", cleanArtist, cleanTitle, valid);
+                        return valid;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AI genre detection failed for '{} - {}': {}", cleanArtist, cleanTitle, e.getMessage());
+        }
+
+        return List.of();
     }
 
     public AiEnrichResponse enrichAlbum(AiEnrichRequest request) {
@@ -143,4 +210,98 @@ public class AudioAiMetadataService {
         }
         return json.trim();
     }
+
+    public Map<Integer, TrackInfoSuggestion> resolveBatchTracks(List<TrackResolveQuery> queries) {
+        if (queries == null || queries.isEmpty()) {
+            return Map.of();
+        }
+
+        if (openAiApiKey == null || openAiApiKey.isBlank()) {
+            log.warn("OpenAI API key is missing or empty. Skipping batch AI track resolution.");
+            return Map.of();
+        }
+
+        Map<Integer, TrackInfoSuggestion> results = new HashMap<>();
+        int chunkSize = 20;
+
+        for (int i = 0; i < queries.size(); i += chunkSize) {
+            List<TrackResolveQuery> chunk = queries.subList(i, Math.min(i + chunkSize, queries.size()));
+            try {
+                StringBuilder listBuilder = new StringBuilder();
+                for (TrackResolveQuery q : chunk) {
+                    listBuilder.append(String.format(
+                            "{\"id\": %d, \"filename\": \"%s\", \"artist\": \"%s\", \"title\": \"%s\", \"album\": \"%s\"}\n",
+                            q.getId(),
+                            escapeJson(q.getFilename()),
+                            escapeJson(q.getTaggedArtist() != null ? q.getTaggedArtist() : ""),
+                            escapeJson(q.getTaggedTitle() != null ? q.getTaggedTitle() : ""),
+                            escapeJson(q.getTaggedAlbum() != null ? q.getTaggedAlbum() : "")
+                    ));
+                }
+
+                String prompt = String.format("""
+                        Given the following music tracks, identify their official artist name, album name (or 'Singles' if an independent single or not from a standard studio album), clean official song title, release year, and 1 to 3 music genres.
+                        Return ONLY a valid JSON array of objects with keys: id (number), artist (string), album (string), title (string), releaseYear (number or null), genres (array of strings).
+                        Do NOT include markdown formatting, backticks, or any explanation.
+
+                        Input tracks:
+                        %s
+                        """, listBuilder.toString());
+
+                String response = openAIService.askAI(prompt, OpenAIService.GPT_4O_MINI, 0.2, openAiApiKey);
+                if (response != null && !response.isBlank()) {
+                    String cleaned = cleanJsonResponse(response);
+                    List<TrackInfoSuggestion> parsed = objectMapper.readValue(
+                            cleaned,
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, TrackInfoSuggestion.class)
+                    );
+                    if (parsed != null) {
+                        for (TrackInfoSuggestion s : parsed) {
+                            if (s != null) {
+                                results.put(s.getId(), s);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve batch tracks via AI for chunk starting at {}: {}", i, e.getMessage());
+            }
+        }
+
+        return results;
+    }
+
+    private String escapeJson(String str) {
+        if (str == null) return "";
+        return str.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TrackResolveQuery {
+        private int id;
+        private String filename;
+        private String taggedArtist;
+        private String taggedTitle;
+        private String taggedAlbum;
+        private Integer taggedYear;
+        private String taggedGenre;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TrackInfoSuggestion {
+        private int id;
+        private String artist;
+        private String album;
+        private String title;
+        private Integer releaseYear;
+        @Builder.Default
+        private List<String> genres = new ArrayList<>();
+    }
 }
+

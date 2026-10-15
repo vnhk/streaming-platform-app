@@ -106,9 +106,13 @@ public class AudioExportImportService {
     }
 
     public AudioZipImportResult importZip(MultipartFile zipFile, String optionalArtist, String optionalAlbumTitle, boolean autoSort) throws Exception {
+        return importZip(zipFile, optionalArtist, optionalAlbumTitle, autoSort, false);
+    }
+
+    public AudioZipImportResult importZip(MultipartFile zipFile, String optionalArtist, String optionalAlbumTitle, boolean autoSort, boolean useAi) throws Exception {
         String filename = zipFile != null ? zipFile.getOriginalFilename() : "unknown.zip";
         long sizeBytes = zipFile != null ? zipFile.getSize() : 0;
-        log.info("Starting ZIP import for '{}' (size: {} bytes, autoSort: {})", filename, sizeBytes, autoSort);
+        log.info("Starting ZIP import for '{}' (size: {} bytes, autoSort: {}, useAi: {})", filename, sizeBytes, autoSort, useAi);
 
         Path tempDir = Files.createTempDirectory("audio_zip_import_");
         List<Path> extractedAudioFiles = new ArrayList<>();
@@ -126,9 +130,9 @@ public class AudioExportImportService {
             extractedAudioFiles.sort(Comparator.comparing(p -> p.getFileName().toString()));
 
             if (autoSort) {
-                return importZipAutoSorted(extractedAudioFiles, coverByFolder, optionalArtist, optionalAlbumTitle);
+                return importZipAutoSorted(extractedAudioFiles, coverByFolder, optionalArtist, optionalAlbumTitle, useAi);
             } else {
-                return importZipSingleAlbum(zipFile, extractedAudioFiles, coverByFolder, optionalArtist, optionalAlbumTitle);
+                return importZipSingleAlbum(zipFile, extractedAudioFiles, coverByFolder, optionalArtist, optionalAlbumTitle, useAi);
             }
         } finally {
             deleteDirectoryRecursively(tempDir);
@@ -229,35 +233,120 @@ public class AudioExportImportService {
                 totalEntries, skippedEntries, extractedAudioFiles.size(), coverByFolder.size());
     }
 
+    private record TrackScan(int index, Path audioPath, String rawFileName, AudioTagService.TagInfo info) {}
+
     private AudioZipImportResult importZipAutoSorted(List<Path> audioFiles, Map<Path, Path> coverByFolder,
-                                                     String fallbackArtist, String fallbackAlbumTitle) {
+                                                     String fallbackArtist, String fallbackAlbumTitle,
+                                                     boolean useAi) {
         Map<String, AudioAlbum> targetAlbums = new HashMap<>();
         Set<String> affectedAlbumTitles = new LinkedHashSet<>();
         List<String> failedTracks = new ArrayList<>();
         int importedCount = 0;
         AudioAlbum firstAlbum = null;
 
-        log.info("Starting auto-sort import for {} audio file(s)...", audioFiles.size());
+        log.info("Starting auto-sort import for {} audio file(s) (useAi={})...", audioFiles.size(), useAi);
+
+        List<TrackScan> scannedTracks = new ArrayList<>();
+        List<AudioAiMetadataService.TrackResolveQuery> aiQueries = new ArrayList<>();
 
         for (int i = 0; i < audioFiles.size(); i++) {
             Path audioPath = audioFiles.get(i);
             String rawFileName = audioPath.getFileName().toString();
+            AudioTagService.TagInfo info = tagService.readTags(audioPath.toFile());
+            scannedTracks.add(new TrackScan(i, audioPath, rawFileName, info));
+
+            if (useAi) {
+                boolean missingGenre = info.genre() == null || info.genre().isBlank() || "Unknown".equalsIgnoreCase(info.genre().trim());
+                boolean missingAlbum = info.album() == null || info.album().isBlank() || "Singles".equalsIgnoreCase(info.album().trim());
+                boolean missingArtist = info.artist() == null || info.artist().isBlank();
+
+                if (missingGenre || missingAlbum || missingArtist) {
+                    aiQueries.add(AudioAiMetadataService.TrackResolveQuery.builder()
+                            .id(i)
+                            .filename(rawFileName)
+                            .taggedArtist(info.artist())
+                            .taggedTitle(info.title())
+                            .taggedAlbum(info.album())
+                            .taggedYear(info.year())
+                            .taggedGenre(info.genre())
+                            .build());
+                }
+            }
+        }
+
+        Map<Integer, AudioAiMetadataService.TrackInfoSuggestion> aiResults = Collections.emptyMap();
+        if (useAi && !aiQueries.isEmpty()) {
+            log.info("Requesting batch AI metadata resolution for {} track(s)...", aiQueries.size());
+            aiResults = aiMetadataService.resolveBatchTracks(aiQueries);
+            log.info("AI returned metadata for {} track(s).", aiResults.size());
+        }
+
+        for (TrackScan scan : scannedTracks) {
+            int i = scan.index();
+            Path audioPath = scan.audioPath();
+            String rawFileName = scan.rawFileName();
+            AudioTagService.TagInfo info = scan.info();
+            AudioAiMetadataService.TrackInfoSuggestion aiSug = aiResults.get(i);
             log.info("Processing track [{}/{}]: {}", i + 1, audioFiles.size(), rawFileName);
 
             try {
-                AudioTagService.TagInfo info = tagService.readTags(audioPath.toFile());
+                String artist;
+                if (info.artist() != null && !info.artist().isBlank()) {
+                    artist = info.artist().trim();
+                } else if (aiSug != null && aiSug.getArtist() != null && !aiSug.getArtist().isBlank()) {
+                    artist = aiSug.getArtist().trim();
+                } else if (fallbackArtist != null && !fallbackArtist.isBlank()) {
+                    artist = fallbackArtist.trim();
+                } else {
+                    artist = "Unknown Artist";
+                }
 
-                String artist = (info.artist() != null && !info.artist().isBlank()) ? info.artist().trim()
-                        : (fallbackArtist != null && !fallbackArtist.isBlank() ? fallbackArtist.trim() : "Unknown Artist");
-
-                String albumTitle = (info.album() != null && !info.album().isBlank()) ? info.album().trim()
-                        : (fallbackAlbumTitle != null && !fallbackAlbumTitle.isBlank() ? fallbackAlbumTitle.trim() : "Singles");
+                String albumTitle;
+                if (fallbackAlbumTitle != null && !fallbackAlbumTitle.isBlank()) {
+                    albumTitle = fallbackAlbumTitle.trim();
+                } else if (info.album() != null && !info.album().isBlank() && !"Singles".equalsIgnoreCase(info.album().trim())) {
+                    albumTitle = info.album().trim();
+                } else if (aiSug != null && aiSug.getAlbum() != null && !aiSug.getAlbum().isBlank()) {
+                    albumTitle = aiSug.getAlbum().trim();
+                } else if (info.album() != null && !info.album().isBlank()) {
+                    albumTitle = info.album().trim();
+                } else {
+                    albumTitle = "Singles";
+                }
 
                 boolean isSingle = "Singles".equalsIgnoreCase(albumTitle);
-                Integer releaseYear = info.year() != null ? info.year() : Year.now().getValue();
+
+                Integer releaseYear = info.year();
+                if (releaseYear == null && aiSug != null && aiSug.getReleaseYear() != null) {
+                    releaseYear = aiSug.getReleaseYear();
+                }
+                if (releaseYear == null) {
+                    releaseYear = Year.now().getValue();
+                }
+
+                String trackTitle;
+                if (info.title() != null && !info.title().isBlank()) {
+                    trackTitle = info.title().trim();
+                } else if (aiSug != null && aiSug.getTitle() != null && !aiSug.getTitle().isBlank()) {
+                    trackTitle = aiSug.getTitle().trim();
+                } else {
+                    trackTitle = cleanFilename(rawFileName);
+                }
+
                 List<String> trackGenres = AudioTagService.parseGenres(info.genre());
-                if (trackGenres.isEmpty()) {
-                    trackGenres = List.of("Unknown");
+                boolean hasValidGenres = !trackGenres.isEmpty() && !(trackGenres.size() == 1 && "Unknown".equalsIgnoreCase(trackGenres.get(0)));
+                if (!hasValidGenres) {
+                    if (aiSug != null && aiSug.getGenres() != null && !aiSug.getGenres().isEmpty()) {
+                        trackGenres = aiSug.getGenres().stream()
+                                .filter(g -> g != null && !g.isBlank() && !"Unknown".equalsIgnoreCase(g.trim()))
+                                .toList();
+                    }
+                    if (trackGenres.isEmpty() && useAi) {
+                        trackGenres = aiMetadataService.detectGenres(artist, isSingle ? trackTitle : albumTitle);
+                    }
+                    if (trackGenres.isEmpty()) {
+                        trackGenres = List.of("Unknown");
+                    }
                 }
 
                 String cacheKey = artist.toLowerCase() + "|||" + albumTitle.toLowerCase();
@@ -307,10 +396,6 @@ public class AudioExportImportService {
                 if (firstAlbum == null) firstAlbum = album;
                 affectedAlbumTitles.add(artist + " - " + albumTitle);
 
-                String trackTitle = (info.title() != null && !info.title().isBlank())
-                        ? info.title().trim()
-                        : cleanFilename(rawFileName);
-
                 int trackNum = info.trackNumber() != null ? info.trackNumber() : (album.getTracks().size() + 1);
 
                 byte[] bytes = Files.readAllBytes(audioPath);
@@ -352,8 +437,8 @@ public class AudioExportImportService {
 
     private AudioZipImportResult importZipSingleAlbum(MultipartFile zipFile, List<Path> extractedAudioFiles,
                                                      Map<Path, Path> coverByFolder, String optionalArtist,
-                                                     String optionalAlbumTitle) throws Exception {
-        log.info("Starting single-album ZIP import for {} track(s)...", extractedAudioFiles.size());
+                                                     String optionalAlbumTitle, boolean useAi) throws Exception {
+        log.info("Starting single-album ZIP import for {} track(s) (useAi={})...", extractedAudioFiles.size(), useAi);
 
         // Determine Artist & Album Title from tags or AI
         String artist = optionalArtist != null && !optionalArtist.isBlank() ? optionalArtist.trim() : null;
@@ -370,9 +455,9 @@ public class AudioExportImportService {
             if (genre.equals("Unknown") && info.genre() != null && !info.genre().isBlank()) genre = info.genre();
         }
 
-        // If still missing metadata, ask AI
-        if (artist == null || albumTitle == null) {
-            log.info("Artist or album title not found in tags; requesting AI enrichment...");
+        // If still missing metadata and AI is enabled, ask AI
+        if (useAi && (artist == null || albumTitle == null || "Unknown".equalsIgnoreCase(genre))) {
+            log.info("Artist, album title, or genre missing in tags; requesting AI enrichment...");
             List<String> filenames = extractedAudioFiles.stream()
                     .map(p -> p.getFileName().toString())
                     .toList();
@@ -387,7 +472,9 @@ public class AudioExportImportService {
                 if (artist == null) artist = aiResp.getArtist();
                 if (albumTitle == null) albumTitle = aiResp.getAlbumTitle();
                 if (releaseYear == null) releaseYear = aiResp.getReleaseYear();
-                if (aiResp.getGenres() != null && !aiResp.getGenres().isEmpty()) genre = aiResp.getGenres().get(0);
+                if ((genre == null || "Unknown".equalsIgnoreCase(genre)) && aiResp.getGenres() != null && !aiResp.getGenres().isEmpty()) {
+                    genre = aiResp.getGenres().get(0);
+                }
                 log.info("AI enrichment result: artist='{}', albumTitle='{}', releaseYear={}, genre='{}'",
                         artist, albumTitle, releaseYear, genre);
             } catch (Exception e) {
@@ -398,6 +485,13 @@ public class AudioExportImportService {
         if (artist == null || artist.isBlank()) artist = "Unknown Artist";
         if (albumTitle == null || albumTitle.isBlank()) albumTitle = cleanZipName(zipFile.getOriginalFilename());
         if (releaseYear == null) releaseYear = Year.now().getValue();
+
+        if (useAi && "Unknown".equalsIgnoreCase(genre)) {
+            List<String> detected = aiMetadataService.detectGenres(artist, albumTitle);
+            if (detected != null && !detected.isEmpty()) {
+                genre = detected.get(0);
+            }
+        }
 
         log.info("Creating single album '{}' by artist '{}' (year: {}, genre: '{}')", albumTitle, artist, releaseYear, genre);
 
