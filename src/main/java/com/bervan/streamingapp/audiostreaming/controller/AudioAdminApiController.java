@@ -287,4 +287,20 @@ public class AudioAdminApiController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    @PostMapping("/albums/{albumId}/tracks/{trackId}/ai-enrich")
+    public ResponseEntity<AudioTrack> aiEnrichTrack(
+            @PathVariable String albumId,
+            @PathVariable String trackId
+    ) {
+        try {
+            AudioTrack enriched = storageService.aiEnrichTrack(albumId, trackId);
+            return ResponseEntity.ok(enriched);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Failed to AI-enrich track " + trackId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }

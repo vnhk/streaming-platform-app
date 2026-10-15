@@ -276,6 +276,18 @@ public class AudioAiMetadataService {
         return results;
     }
 
+    public TrackInfoSuggestion resolveSingleTrack(String artist, String title, String album, String filename) {
+        TrackResolveQuery query = TrackResolveQuery.builder()
+                .id(1)
+                .filename(filename)
+                .taggedArtist(artist)
+                .taggedTitle(title)
+                .taggedAlbum(album)
+                .build();
+        Map<Integer, TrackInfoSuggestion> map = resolveBatchTracks(List.of(query));
+        return map.get(1);
+    }
+
     private String escapeJson(String str) {
         if (str == null) return "";
         return str.replace("\\", "\\\\").replace("\"", "\\\"");

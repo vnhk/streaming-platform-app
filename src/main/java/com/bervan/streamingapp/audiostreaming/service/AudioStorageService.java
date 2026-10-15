@@ -836,6 +836,39 @@ public class AudioStorageService {
                 album.setSingle(false);
             }
 
+            // If it's a collection of mixed singles, resolve individual track metadata
+            if ((album.isSingle() || "Singles".equalsIgnoreCase(album.getTitle())) && album.getTracks().size() > 1) {
+                List<AudioAiMetadataService.TrackResolveQuery> queries = new ArrayList<>();
+                for (int i = 0; i < album.getTracks().size(); i++) {
+                    AudioTrack t = album.getTracks().get(i);
+                    queries.add(AudioAiMetadataService.TrackResolveQuery.builder()
+                            .id(i)
+                            .filename(t.getFilename())
+                            .taggedArtist(t.getArtist())
+                            .taggedTitle(t.getTitle())
+                            .taggedAlbum(album.getTitle())
+                            .taggedYear(t.getYear())
+                            .build());
+                }
+                Map<Integer, AudioAiMetadataService.TrackInfoSuggestion> trackMap = aiMetadataService.resolveBatchTracks(queries);
+                for (int i = 0; i < album.getTracks().size(); i++) {
+                    AudioTrack t = album.getTracks().get(i);
+                    AudioAiMetadataService.TrackInfoSuggestion sug = trackMap.get(i);
+                    if (sug != null) {
+                        if (sug.getGenres() != null && !sug.getGenres().isEmpty()) {
+                            t.setGenres(new ArrayList<>(sug.getGenres()));
+                            t.setGenre(AudioTagService.formatGenresForTag(sug.getGenres()));
+                        }
+                        if (sug.getReleaseYear() != null && t.getYear() == null) {
+                            t.setYear(sug.getReleaseYear());
+                        }
+                        if (sug.getArtist() != null && (t.getArtist() == null || t.getArtist().isBlank() || "Unknown Artist".equalsIgnoreCase(t.getArtist()))) {
+                            t.setArtist(sug.getArtist().trim());
+                        }
+                    }
+                }
+            }
+
             Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
             String genreTagStr = AudioTagService.formatGenresForTag(album.getGenres());
 
@@ -870,6 +903,59 @@ public class AudioStorageService {
                     album.getTitle(), album.getArtist(), album.getGenres(), album.getReleaseYear());
         }
         return album;
+    }
+
+    public synchronized AudioTrack aiEnrichTrack(String albumId, String trackId) {
+        AudioAlbum album = albumsById.get(albumId);
+        if (album == null) throw new IllegalArgumentException("Album not found: " + albumId);
+
+        AudioTrack track = album.getTracks().stream()
+                .filter(t -> t.getId().equals(trackId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Track not found: " + trackId));
+
+        String artist = track.getArtist() != null && !track.getArtist().isBlank() ? track.getArtist() : album.getArtist();
+        String title = track.getTitle() != null && !track.getTitle().isBlank() ? track.getTitle() : cleanFilename(track.getFilename());
+
+        AudioAiMetadataService.TrackInfoSuggestion sug = aiMetadataService.resolveSingleTrack(
+                artist, title, album.getTitle(), track.getFilename()
+        );
+
+        if (sug != null) {
+            if (sug.getTitle() != null && !sug.getTitle().isBlank()) {
+                track.setTitle(sug.getTitle().trim());
+            }
+            if (sug.getArtist() != null && !sug.getArtist().isBlank()) {
+                track.setArtist(sug.getArtist().trim());
+            }
+            if (sug.getReleaseYear() != null) {
+                track.setYear(sug.getReleaseYear());
+            }
+            if (sug.getGenres() != null && !sug.getGenres().isEmpty()) {
+                track.setGenres(new ArrayList<>(sug.getGenres()));
+                track.setGenre(AudioTagService.formatGenresForTag(sug.getGenres()));
+            }
+
+            Path albumDir = getAudioLibraryRoot().resolve(album.getFolderPath());
+            Path trackFile = albumDir.resolve(track.getFilename());
+            if (Files.exists(trackFile) && trackFile.toString().toLowerCase().endsWith(".mp3")) {
+                audioTagService.updateTags(
+                        trackFile.toFile(),
+                        track.getTitle(),
+                        track.getArtist(),
+                        album.getTitle(),
+                        track.getTrackNumber(),
+                        track.getYear(),
+                        track.getGenre()
+                );
+            }
+
+            saveAlbumJson(album, albumDir);
+            log.info("AI enrichment complete for track '{}' (id: {}): artist='{}', title='{}', genres={}",
+                    track.getTitle(), track.getId(), track.getArtist(), track.getTitle(), track.getGenres());
+        }
+
+        return track;
     }
 
     public synchronized AudioTrack updateTrack(String albumId, String trackId, UpdateTrackRequest request) {
