@@ -51,6 +51,17 @@ public class AudioStreamingApiController {
 
     @GetMapping("/albums/{albumId}/cover")
     public ResponseEntity<Resource> getAlbumCover(@PathVariable String albumId) {
+        var cachedOpt = storageService.getCachedCover(albumId);
+        if (cachedOpt.isPresent()) {
+            var cached = cachedOpt.get();
+            return ResponseEntity.ok()
+                    .contentType(cached.getMediaType())
+                    .eTag(cached.getEtag())
+                    .lastModified(cached.getLastModified())
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400, immutable")
+                    .body(new org.springframework.core.io.ByteArrayResource(cached.getBytes()));
+        }
+
         File file = storageService.getCoverFile(albumId);
         if (file == null || !file.exists()) {
             return ResponseEntity.notFound().build();
@@ -61,7 +72,7 @@ public class AudioStreamingApiController {
 
         return ResponseEntity.ok()
                 .contentType(mediaType)
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400, immutable")
                 .body(new FileSystemResource(file));
     }
 

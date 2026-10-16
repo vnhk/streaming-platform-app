@@ -32,6 +32,7 @@ public class AudioStorageService {
     private final FileDBStorageService fileDBStorageService;
     private final AudioTagService audioTagService;
     private final AudioAiMetadataService aiMetadataService;
+    private final AudioCoverCacheService coverCacheService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${audio-streaming.file-storage-relative-path:/Audio Library}")
@@ -45,12 +46,14 @@ public class AudioStorageService {
                                FileDiskStorageService fileDiskStorageService,
                                FileDBStorageService fileDBStorageService,
                                AudioTagService audioTagService,
-                               AudioAiMetadataService aiMetadataService) {
+                               AudioAiMetadataService aiMetadataService,
+                               AudioCoverCacheService coverCacheService) {
         this.fileServiceManager = fileServiceManager;
         this.fileDiskStorageService = fileDiskStorageService;
         this.fileDBStorageService = fileDBStorageService;
         this.audioTagService = audioTagService;
         this.aiMetadataService = aiMetadataService;
+        this.coverCacheService = coverCacheService;
     }
 
     public String getAudioRelativePath() {
@@ -237,6 +240,8 @@ public class AudioStorageService {
         }
 
         log.info("Loaded {} albums and {} tracks into memory.", albumsById.size(), tracksById.size());
+        coverCacheService.clear();
+        coverCacheService.preloadAll(albumsById.values(), this::getCoverFile);
     }
 
     private AudioAlbum loadOrScanAlbum(Path albumPath, String artistDirName) throws IOException {
@@ -532,8 +537,10 @@ public class AudioStorageService {
         boolean hasCover = false;
         if (cover != null && !cover.isEmpty()) {
             coverFilename = "cover.jpg";
-            saveOrUpdateFile(coverFilename, cover.getBytes(), cover.getContentType() != null ? cover.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
+            byte[] coverBytes = cover.getBytes();
+            saveOrUpdateFile(coverFilename, coverBytes, cover.getContentType() != null ? cover.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
             hasCover = true;
+            coverCacheService.putCover(albumId, coverBytes, coverFilename);
         }
 
         AudioAlbum album = AudioAlbum.builder()
@@ -1070,6 +1077,7 @@ public class AudioStorageService {
     public synchronized void deleteAlbum(String albumId) throws IOException {
         AudioAlbum album = albumsById.remove(albumId);
         if (album != null) {
+            coverCacheService.evictCover(albumId);
             for (AudioTrack track : album.getTracks()) {
                 unregisterTrack(track);
             }
@@ -1160,12 +1168,18 @@ public class AudioStorageService {
         String albumStoragePath = getStoragePathForAlbum(album);
         String filename = "cover.jpg";
 
-        saveOrUpdateFile(filename, coverFile.getBytes(), coverFile.getContentType() != null ? coverFile.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
+        byte[] coverBytes = coverFile.getBytes();
+        saveOrUpdateFile(filename, coverBytes, coverFile.getContentType() != null ? coverFile.getContentType() : "image/jpeg", "Audio album cover", albumStoragePath, albumDir);
 
         album.setCoverFilename(filename);
         album.setHasCover(true);
         saveAlbumJson(album, albumDir);
+        coverCacheService.putCover(albumId, coverBytes, filename);
         log.info("Updated cover for album [{}]", album.getTitle());
+    }
+
+    public Optional<AudioCoverCacheService.CachedCover> getCachedCover(String albumId) {
+        return coverCacheService.getCover(albumId);
     }
 
     public File getTrackFile(String trackId) {
