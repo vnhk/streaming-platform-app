@@ -4,6 +4,7 @@ import com.bervan.common.ImageScaleUtility;
 import com.bervan.common.service.OpenAIService;
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.filestorage.model.UploadResponse;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
@@ -55,66 +56,80 @@ public class StreamingConfigLoader {
         Map<Metadata, MetadataByPathAndType> allProductions = loadAllProductionsMetadata();
 
         for (Map.Entry<Metadata, MetadataByPathAndType> productionEntry : allProductions.entrySet()) {
-            ProductionData productionData = new ProductionData();
-            Metadata mainFolder = productionEntry.getKey();
-            productionData.setMainFolder(mainFolder);
-            String mainFolderPath = (mainFolder.getPath() + mainFolder.getFilename() + File.separator).trim();
-            log.info("Building production's data :{}", mainFolderPath);
-            productionData.setMainFolderPath(mainFolderPath);
-            productionData.setProductionId(productionEntry.getKey().getId().toString());
-            productionData.setProductionFoldersByPathAndType(productionEntry.getValue());
-
-            MetadataByPathAndType productionFolders = productionEntry.getValue();
-
-            if (productionFolders.get(mainFolderPath) == null) {
-                log.error("Production Folders Empty: Details file is missing for production " + mainFolderPath);
-                continue;
+            ProductionData productionData = buildProductionData(productionEntry.getKey(), productionEntry.getValue());
+            if (productionData != null && productionData.getProductionName() != null) {
+                result.put(productionData.getProductionName(), productionData);
             }
-
-            List<Metadata> details = productionFolders.get(mainFolderPath).get(ProductionFileType.DETAILS);
-            ProductionDetails productionDetails;
-
-            if (details != null && !details.isEmpty()) {
-                Metadata metadata = details.get(0);
-                try {
-                    byte[] file = fileServiceManager.readFile(metadata);
-                    ObjectMapper objectMapper = new ObjectMapper();
-                    String jsonString = new String(file, StandardCharsets.UTF_8);
-                    productionDetails = objectMapper.readValue(jsonString, ProductionDetails.class);
-                    productionData.setProductionName(productionDetails.getName());
-                    productionData.setProductionDetails(productionDetails);
-                } catch (Exception e) {
-                    log.error("Error parsing JSON to ProductionDetails", e);
-                    continue;
-                }
-            } else {
-                log.warn("Details file does not exist for production: {}. Generating with AI...", mainFolderPath);
-                try {
-                    productionDetails = generateProductionDetails(mainFolder, productionFolders, mainFolderPath);
-                    if (productionDetails != null) {
-                        productionData.setProductionName(productionDetails.getName());
-                        productionData.setProductionDetails(productionDetails);
-                        saveDetailsToFile(mainFolder, mainFolderPath, productionDetails);
-                    } else {
-                        log.error("Failed to generate production details for: {}", mainFolderPath);
-                        continue;
-                    }
-                } catch (Exception e) {
-                    log.error("Error generating ProductionDetails with AI", e);
-                    continue;
-                }
-            }
-
-            loadMainPosterSrc(productionFolders, mainFolderPath, productionData);
-            loadProductionStructure(productionData, productionFolders);
-
-            result.put(productionData.getProductionName(), productionData);
         }
 
         long end = System.currentTimeMillis();
         log.info("Loading all productions finished in {} ms", end - start);
         log.info("Loaded Productions: [{}]", String.join(", ", result.keySet()));
         return result;
+    }
+
+    public ProductionData loadSingleProduction(Metadata mainFolder) {
+        log.info("Loading single production for folder: {}", mainFolder.getPath() + mainFolder.getFilename());
+        MetadataByPathAndType productionFolders = videoManager.loadVideoDirectoryContent(mainFolder);
+        return buildProductionData(mainFolder, productionFolders);
+    }
+
+    public ProductionData buildProductionData(Metadata mainFolder, MetadataByPathAndType productionFolders) {
+        ProductionData productionData = new ProductionData();
+        productionData.setMainFolder(mainFolder);
+        String mainFolderPath = (mainFolder.getPath() + mainFolder.getFilename() + File.separator).trim();
+        log.info("Building production's data :{}", mainFolderPath);
+        productionData.setMainFolderPath(mainFolderPath);
+        productionData.setProductionId(mainFolder.getId().toString());
+        productionData.setProductionFoldersByPathAndType(productionFolders);
+
+        Map<ProductionFileType, List<Metadata>> mainFolderMap = productionFolders.get(mainFolderPath);
+        if (mainFolderMap == null) {
+            mainFolderMap = new HashMap<>();
+            productionFolders.put(mainFolderPath, mainFolderMap);
+        }
+
+        List<Metadata> details = mainFolderMap.get(ProductionFileType.DETAILS);
+        ProductionDetails productionDetails;
+
+        if (details != null && !details.isEmpty()) {
+            Metadata metadata = details.get(0);
+            try {
+                byte[] file = fileServiceManager.readFile(metadata);
+                ObjectMapper objectMapper = new ObjectMapper();
+                String jsonString = new String(file, StandardCharsets.UTF_8);
+                productionDetails = objectMapper.readValue(jsonString, ProductionDetails.class);
+                productionData.setProductionName(productionDetails.getName());
+                productionData.setProductionDetails(productionDetails);
+            } catch (Exception e) {
+                log.error("Error parsing JSON to ProductionDetails", e);
+                return null;
+            }
+        } else {
+            log.warn("Details file does not exist for production: {}. Generating with AI...", mainFolderPath);
+            try {
+                productionDetails = generateProductionDetails(mainFolder, productionFolders, mainFolderPath);
+                if (productionDetails != null) {
+                    productionData.setProductionName(productionDetails.getName());
+                    productionData.setProductionDetails(productionDetails);
+                    Metadata savedDetails = saveDetailsToFile(mainFolder, mainFolderPath, productionDetails);
+                    if (savedDetails != null) {
+                        mainFolderMap.computeIfAbsent(ProductionFileType.DETAILS, k -> new ArrayList<>()).add(savedDetails);
+                    }
+                } else {
+                    log.error("Failed to generate production details for: {}", mainFolderPath);
+                    return null;
+                }
+            } catch (Exception e) {
+                log.error("Error generating ProductionDetails with AI", e);
+                return null;
+            }
+        }
+
+        loadMainPosterSrc(productionFolders, mainFolderPath, productionData);
+        loadProductionStructure(productionData, productionFolders);
+
+        return productionData;
     }
 
     private void loadProductionStructure(ProductionData productionData, MetadataByPathAndType productionFolders) {
@@ -139,7 +154,7 @@ public class StreamingConfigLoader {
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new HLSTvSeriesRootProductionStructure();
             Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
-            List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
+            List<Metadata> seasonDirectories = seasonsMap != null ? seasonsMap.get(ProductionFileType.DIRECTORY) : null;
             List<HLSSeasonStructure> seasonStructureList = new ArrayList<>();
             if (seasonDirectories == null || seasonDirectories.isEmpty()) {
                 log.warn("[{}] No season directories found at {}", productionName, productionData.getMainFolderPath());
@@ -206,10 +221,16 @@ public class StreamingConfigLoader {
 
     private void updateRoot(ProductionData productionData, MetadataByPathAndType productionFolders, BaseRootProductionStructure rootProductionStructure) {
         rootProductionStructure.setMainFolder(productionData.getMainFolder());
-        rootProductionStructure.setDetails(productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.DETAILS).get(0));
-        List<Metadata> poster = productionFolders.get(productionData.getMainFolderPath()).get(ProductionFileType.POSTER);
-        if (poster != null && !poster.isEmpty()) {
-            rootProductionStructure.setPoster(poster.get(0));
+        Map<ProductionFileType, List<Metadata>> mainFolderMap = productionFolders.get(productionData.getMainFolderPath());
+        if (mainFolderMap != null) {
+            List<Metadata> details = mainFolderMap.get(ProductionFileType.DETAILS);
+            if (details != null && !details.isEmpty()) {
+                rootProductionStructure.setDetails(details.get(0));
+            }
+            List<Metadata> poster = mainFolderMap.get(ProductionFileType.POSTER);
+            if (poster != null && !poster.isEmpty()) {
+                rootProductionStructure.setPoster(poster.get(0));
+            }
         }
     }
 
@@ -219,7 +240,7 @@ public class StreamingConfigLoader {
         if (productionData.getProductionDetails().getType() == ProductionDetails.VideoType.TV_SERIES) {
             rootProductionStructure = new MP4TvSeriesRootProductionStructure();
             Map<ProductionFileType, List<Metadata>> seasonsMap = productionFolders.get(productionData.getMainFolderPath());
-            List<Metadata> seasonDirectories = seasonsMap.get(ProductionFileType.DIRECTORY);
+            List<Metadata> seasonDirectories = seasonsMap != null ? seasonsMap.get(ProductionFileType.DIRECTORY) : null;
             List<MP4SeasonStructure> seasonStructureList = new ArrayList<>();
             if (seasonDirectories == null || seasonDirectories.isEmpty()) {
                 log.warn("[{}] No season directories found at {}", productionName, productionData.getMainFolderPath());
@@ -370,7 +391,7 @@ public class StreamingConfigLoader {
         }
     }
 
-    private void saveDetailsToFile(Metadata mainFolder, String mainFolderPath, ProductionDetails productionDetails) {
+    private Metadata saveDetailsToFile(Metadata mainFolder, String mainFolderPath, ProductionDetails productionDetails) {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             String jsonContent = objectMapper.writerWithDefaultPrettyPrinter()
@@ -380,7 +401,7 @@ public class StreamingConfigLoader {
 
             // Save the file to the production folder
             String detailsFileName = "details.json";
-            fileServiceManager.save(
+            UploadResponse uploadResponse = fileServiceManager.save(
                     new BervanMockMultiPartFile(
                             detailsFileName,
                             detailsFileName,
@@ -392,9 +413,13 @@ public class StreamingConfigLoader {
             );
 
             log.info("Successfully saved details.json for: {}", mainFolderPath);
+            if (uploadResponse != null && uploadResponse.getMetadata() != null && !uploadResponse.getMetadata().isEmpty()) {
+                return uploadResponse.getMetadata().get(0);
+            }
         } catch (Exception e) {
             log.error("Error saving details.json for: {}", mainFolderPath, e);
         }
+        return null;
     }
 
     private Map<String, Metadata> getSubtitlesMap(List<Metadata> subtitles) {
@@ -412,14 +437,19 @@ public class StreamingConfigLoader {
     }
 
     private void loadMainPosterSrc(MetadataByPathAndType productionFolders, String mainFolderPath, ProductionData productionData) {
-        List<Metadata> mainFolderPoster = productionFolders.get(mainFolderPath).get(ProductionFileType.POSTER);
+        Map<ProductionFileType, List<Metadata>> mainFolderFiles = productionFolders.get(mainFolderPath);
+        if (mainFolderFiles == null) return;
+        List<Metadata> mainFolderPoster = mainFolderFiles.get(ProductionFileType.POSTER);
         if (mainFolderPoster != null && !mainFolderPoster.isEmpty()) {
             try {
-                byte[] file = fileServiceManager.readFile(mainFolderPoster.get(0));
-                BufferedImage original = ImageIO.read(new ByteArrayInputStream(file));
-                Base64.getEncoder().encodeToString(ImageScaleUtility.scaleImage(original, original.getHeight(), 0.05f).toByteArray());;
-
-                productionData.setBase64PosterSrc(toBase64(new ByteArrayInputStream(file)));
+                Metadata posterMeta = mainFolderPoster.get(0);
+                byte[] file = fileServiceManager.readFile(posterMeta);
+                if (file != null && file.length > 0) {
+                    String filename = posterMeta.getFilename();
+                    String mime = (filename != null && (filename.toLowerCase().endsWith(".jpg") || filename.toLowerCase().endsWith(".jpeg")))
+                            ? "image/jpeg" : "image/png";
+                    productionData.setBase64PosterSrc("data:" + mime + ";base64," + Base64.getEncoder().encodeToString(file));
+                }
             } catch (Exception e) {
                 log.error("Error converting poster to base64", e);
             }

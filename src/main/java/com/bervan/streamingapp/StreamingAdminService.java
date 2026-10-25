@@ -12,7 +12,9 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -169,6 +171,51 @@ public class StreamingAdminService {
         streamingProductionData.clear();
         streamingProductionData.putAll(newData);
         log.info("Config reloaded, productions count: {}", streamingProductionData.size());
+    }
+
+    public void reloadProduction(String productionName, Map<String, ProductionData> streamingProductionData) {
+        log.info("Reloading production: {}", productionName);
+        long start = System.currentTimeMillis();
+
+        Metadata mainFolder = null;
+        ProductionData existing = streamingProductionData.get(productionName);
+        if (existing != null && existing.getMainFolder() != null) {
+            mainFolder = existing.getMainFolder();
+        }
+
+        if (mainFolder == null) {
+            Optional<Metadata> opt = videoManager.loadVideoMainDirectory(productionName);
+            if (opt.isPresent()) {
+                mainFolder = opt.get();
+            }
+        }
+
+        if (mainFolder == null) {
+            List<Metadata> allDirs = videoManager.loadVideosMainDirectories();
+            for (Metadata dir : allDirs) {
+                if (dir.getFilename().equalsIgnoreCase(productionName)) {
+                    mainFolder = dir;
+                    break;
+                }
+            }
+        }
+
+        if (mainFolder == null) {
+            log.warn("Could not find main folder for production: {}, falling back to full reload", productionName);
+            reloadConfig(streamingProductionData);
+            return;
+        }
+
+        ProductionData updatedData = streamingConfigLoader.loadSingleProduction(mainFolder);
+        if (updatedData != null && updatedData.getProductionName() != null) {
+            if (!updatedData.getProductionName().equals(productionName)) {
+                streamingProductionData.remove(productionName);
+            }
+            streamingProductionData.put(updatedData.getProductionName(), updatedData);
+            log.info("Reloaded production {} in {} ms", updatedData.getProductionName(), System.currentTimeMillis() - start);
+        } else {
+            log.warn("Failed to load production data for: {}", productionName);
+        }
     }
 
     private String resolveImageFilename(String posterFilename) {

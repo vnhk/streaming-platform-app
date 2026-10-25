@@ -55,19 +55,36 @@ public class RemoteControlWebSocketHandler implements WebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        log.error("WebSocket transport error: " + exception.getMessage());
+        String msg = exception != null ? exception.getMessage() : "";
+        if (msg != null && (msg.contains("CLOSED") || msg.contains("Broken pipe") || msg.contains("Connection reset"))) {
+            log.warn("WebSocket client disconnected: " + msg);
+        } else {
+            log.error("WebSocket transport error: " + msg, exception);
+        }
+        try {
+            if (session != null && session.isOpen()) {
+                session.close();
+            }
+        } catch (Exception ignored) {
+        }
+        cleanupSession(session);
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus closeStatus) throws Exception {
+        cleanupSession(session);
+    }
+
+    private void cleanupSession(WebSocketSession session) {
+        if (session == null) return;
         String deviceType = (String) session.getAttributes().get("deviceType");
         String roomId = (String) session.getAttributes().get("roomId");
         String sessionKey = roomId != null ? roomId : "default";
 
         if ("TV".equals(deviceType)) {
-            tvSessions.remove(sessionKey);
+            tvSessions.remove(sessionKey, session);
         } else if ("REMOTE".equals(deviceType)) {
-            remoteSessions.remove(sessionKey);
+            remoteSessions.remove(sessionKey, session);
         }
     }
 

@@ -58,7 +58,7 @@ public class StreamingAdminApiController {
             }
             adminService.createProduction(name, type, videoFormat, description, rating,
                     yearStart, yearEnd, country, categories, tags, posterBytes, posterFilename);
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -73,7 +73,7 @@ public class StreamingAdminApiController {
         if (!isAdmin()) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         try {
             adminService.createSeason(name, seasonNumber);
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -91,7 +91,7 @@ public class StreamingAdminApiController {
         try {
             adminService.addEpisodeMP4(name, seasonNumber, episodeNumber,
                     file.getInputStream(), file.getOriginalFilename());
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -108,7 +108,7 @@ public class StreamingAdminApiController {
         try {
             adminService.addEpisodeHLS(name, seasonNumber,
                     file.getInputStream(), file.getOriginalFilename());
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -123,7 +123,7 @@ public class StreamingAdminApiController {
         if (!isAdmin()) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         try {
             adminService.addMovieVideoMP4(name, file.getInputStream(), file.getOriginalFilename());
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -138,7 +138,7 @@ public class StreamingAdminApiController {
         if (!isAdmin()) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         try {
             adminService.addSubtitlesFromZip(name, file.getInputStream());
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -154,7 +154,7 @@ public class StreamingAdminApiController {
         if (file == null || file.isEmpty()) return ResponseEntity.badRequest().build();
         try {
             adminService.addPoster(name, file.getInputStream(), file.getOriginalFilename());
-            adminService.reloadConfig(streamingProductionData);
+            adminService.reloadProduction(name, streamingProductionData);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

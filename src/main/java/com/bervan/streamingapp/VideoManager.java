@@ -144,6 +144,24 @@ public class VideoManager {
         return response.getResultList();
     }
 
+    public Optional<Metadata> loadVideoMainDirectory(String folderName) {
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.addCriterion("G1", Metadata.class, "path",
+                SearchOperation.EQUALS_OPERATION, appFolder + File.separator);
+        searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
+                SearchOperation.EQUALS_OPERATION, true);
+        searchRequest.addCriterion("G1", Metadata.class, "filename",
+                SearchOperation.EQUALS_OPERATION, folderName);
+
+        SearchQueryOption options = new SearchQueryOption(Metadata.class);
+        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
+        List<Metadata> resultList = response.getResultList();
+        if (resultList.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(resultList.get(0));
+    }
+
     public List<Metadata> loadById(String metadataId) {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addIdEqualsCriteria("G1", Metadata.class, UUID.fromString(metadataId));
