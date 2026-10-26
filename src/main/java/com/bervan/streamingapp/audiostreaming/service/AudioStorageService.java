@@ -175,15 +175,24 @@ public class AudioStorageService {
     public void init() {
         try {
             Path root = getAudioLibraryRoot();
-            if (!Files.exists(root)) {
-                String cleanPath = getAudioRelativePath();
-                if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
-                fileServiceManager.createEmptyDirectory("", cleanPath);
-                log.info("Initialized audio library directory via FileServiceManager at: {}", root.toAbsolutePath());
-            } else {
-                String cleanPath = getAudioRelativePath();
-                if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
-                ensureDirectoryMetadata("/", cleanPath);
+            String cleanPath = getAudioRelativePath();
+            if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
+            while (cleanPath.endsWith("/")) cleanPath = cleanPath.substring(0, cleanPath.length() - 1);
+
+            final String targetName = cleanPath;
+            List<Metadata> existing = fileDBStorageService.loadByPathAndFilename("/", targetName);
+            boolean onDisk = Files.exists(root);
+
+            if (existing.isEmpty()) {
+                if (!onDisk) {
+                    fileServiceManager.createEmptyDirectory("/", targetName);
+                    log.info("Initialized audio library directory via FileServiceManager at: {}", root.toAbsolutePath());
+                } else {
+                    fileDBStorageService.createEmptyDirectory("/", targetName);
+                    log.info("Registered audio library directory metadata in DB: {}", targetName);
+                }
+            } else if (!onDisk) {
+                fileDiskStorageService.createEmptyDirectory("/", targetName);
             }
             reloadAll();
         } catch (Exception e) {

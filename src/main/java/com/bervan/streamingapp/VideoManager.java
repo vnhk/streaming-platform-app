@@ -15,6 +15,7 @@ import com.bervan.streamingapp.config.structure.mp4.MP4EpisodeStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
+import jakarta.annotation.PostConstruct;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -54,8 +55,29 @@ public class VideoManager {
     private final FileServiceManager fileServiceManager;
     @Value("${file.service.storage.folder.main}")
     public String pathToFileStorage;
-    @Value("${streaming-platform.file-storage-relative-path}")
+    @Value("${streaming-platform.file-storage-relative-path:/Streaming Platform}")
     public String appFolder;
+
+    @PostConstruct
+    public void init() {
+        try {
+            String folderName = appFolder != null && !appFolder.isBlank() && !appFolder.startsWith("${")
+                    ? appFolder.trim() : "Streaming Platform";
+            if (folderName.startsWith("/")) folderName = folderName.substring(1);
+            while (folderName.endsWith("/")) folderName = folderName.substring(0, folderName.length() - 1);
+
+            final String targetName = folderName;
+            boolean existsInDb = fileServiceManager.loadByPath("/").stream()
+                    .anyMatch(m -> m.isDirectory() && targetName.equalsIgnoreCase(m.getFilename()));
+
+            if (!existsInDb) {
+                fileServiceManager.createEmptyDirectory("/", targetName);
+                log.info("Initialized root Streaming Platform directory in DB and storage: {}", targetName);
+            }
+        } catch (Exception e) {
+            log.warn("Could not ensure streaming platform root directory: {}", e.getMessage());
+        }
+    }
 
 
     public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
