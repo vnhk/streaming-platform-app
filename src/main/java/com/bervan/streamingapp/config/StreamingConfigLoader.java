@@ -5,6 +5,8 @@ import com.bervan.common.service.OpenAIService;
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
 import com.bervan.filestorage.model.UploadResponse;
+import com.bervan.filestorage.service.FileDBStorageService;
+import com.bervan.filestorage.service.FileDiskStorageService;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.VideoManager;
@@ -19,6 +21,7 @@ import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStruct
 import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -28,20 +31,31 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Stream;
 
 @Service
 public class StreamingConfigLoader {
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final FileServiceManager fileServiceManager;
+    private final FileDiskStorageService fileDiskStorageService;
+    private final FileDBStorageService fileDBStorageService;
     private final VideoManager videoManager;
     private final OpenAIService openAIService;
 
     @Value("${openai.api.key:}")
     private String openAiApiKey;
 
-    public StreamingConfigLoader(FileServiceManager fileServiceManager, VideoManager videoManager) {
+    public StreamingConfigLoader(FileServiceManager fileServiceManager,
+                                 FileDiskStorageService fileDiskStorageService,
+                                 FileDBStorageService fileDBStorageService,
+                                 VideoManager videoManager) {
         this.fileServiceManager = fileServiceManager;
+        this.fileDiskStorageService = fileDiskStorageService;
+        this.fileDBStorageService = fileDBStorageService;
         this.videoManager = videoManager;
         this.openAIService = new OpenAIService(
                 "You are a helpful assistant that generates movie and TV series metadata in JSON format. " +
@@ -90,7 +104,7 @@ public class StreamingConfigLoader {
         }
 
         List<Metadata> details = mainFolderMap.get(ProductionFileType.DETAILS);
-        ProductionDetails productionDetails;
+        ProductionDetails productionDetails = null;
 
         if (details != null && !details.isEmpty()) {
             Metadata metadata = details.get(0);
@@ -101,28 +115,52 @@ public class StreamingConfigLoader {
                 productionDetails = objectMapper.readValue(jsonString, ProductionDetails.class);
                 productionData.setProductionName(productionDetails.getName());
                 productionData.setProductionDetails(productionDetails);
+                cleanDuplicateDetailsFiles(mainFolderPath);
             } catch (Exception e) {
                 log.error("Error parsing JSON to ProductionDetails", e);
                 return null;
             }
         } else {
-            log.warn("Details file does not exist for production: {}. Generating with AI...", mainFolderPath);
+            // Check if details.json exists physically on disk before asking AI
             try {
-                productionDetails = generateProductionDetails(mainFolder, productionFolders, mainFolderPath);
-                if (productionDetails != null) {
+                Path diskDetailsFile = fileDiskStorageService.getFile(mainFolderPath + "details.json");
+                if (Files.exists(diskDetailsFile)) {
+                    byte[] file = Files.readAllBytes(diskDetailsFile);
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    productionDetails = objectMapper.readValue(file, ProductionDetails.class);
                     productionData.setProductionName(productionDetails.getName());
                     productionData.setProductionDetails(productionDetails);
-                    Metadata savedDetails = saveDetailsToFile(mainFolder, mainFolderPath, productionDetails);
+                    log.info("Loaded existing details.json from disk for: {}", mainFolderPath);
+
+                    Metadata savedDetails = registerOrUpdateDetailsMetadata(mainFolderPath, "details.json", file.length);
                     if (savedDetails != null) {
                         mainFolderMap.computeIfAbsent(ProductionFileType.DETAILS, k -> new ArrayList<>()).add(savedDetails);
                     }
-                } else {
-                    log.error("Failed to generate production details for: {}", mainFolderPath);
-                    return null;
+                    cleanDuplicateDetailsFiles(mainFolderPath);
                 }
             } catch (Exception e) {
-                log.error("Error generating ProductionDetails with AI", e);
-                return null;
+                log.error("Error reading existing details.json from disk for: {}", mainFolderPath, e);
+            }
+
+            if (productionDetails == null) {
+                log.warn("Details file does not exist for production: {}. Generating with AI...", mainFolderPath);
+                try {
+                    productionDetails = generateProductionDetails(mainFolder, productionFolders, mainFolderPath);
+                    if (productionDetails != null) {
+                        productionData.setProductionName(productionDetails.getName());
+                        productionData.setProductionDetails(productionDetails);
+                        Metadata savedDetails = saveDetailsToFile(mainFolder, mainFolderPath, productionDetails);
+                        if (savedDetails != null) {
+                            mainFolderMap.computeIfAbsent(ProductionFileType.DETAILS, k -> new ArrayList<>()).add(savedDetails);
+                        }
+                    } else {
+                        log.error("Failed to generate production details for: {}", mainFolderPath);
+                        return null;
+                    }
+                } catch (Exception e) {
+                    log.error("Error generating ProductionDetails with AI", e);
+                    return null;
+                }
             }
         }
 
@@ -401,25 +439,85 @@ public class StreamingConfigLoader {
 
             // Save the file to the production folder
             String detailsFileName = "details.json";
+
+            // Delete stray details.json from disk to avoid (1) suffix
+            try {
+                Path diskFile = fileDiskStorageService.getFile(mainFolderPath + detailsFileName);
+                Files.deleteIfExists(diskFile);
+            } catch (Exception ignored) {}
+
             UploadResponse uploadResponse = fileServiceManager.save(
                     new BervanMockMultiPartFile(
                             detailsFileName,
                             detailsFileName,
                             "application/json",
-                            new ByteArrayInputStream(jsonBytes)
+                            jsonBytes
                     ),
                     "Auto-generated production details",
-                    mainFolderPath
+                    mainFolderPath,
+                    true
             );
 
             log.info("Successfully saved details.json for: {}", mainFolderPath);
             if (uploadResponse != null && uploadResponse.getMetadata() != null && !uploadResponse.getMetadata().isEmpty()) {
+                cleanDuplicateDetailsFiles(mainFolderPath);
                 return uploadResponse.getMetadata().get(0);
             }
         } catch (Exception e) {
             log.error("Error saving details.json for: {}", mainFolderPath, e);
         }
         return null;
+    }
+
+    private Metadata registerOrUpdateDetailsMetadata(String path, String filename, long fileSize) {
+        try {
+            String cleanPath = path.endsWith(File.separator) ? path : path + File.separator;
+            List<Metadata> found = fileDBStorageService.loadByPathAndFilename(cleanPath, filename);
+            if (!found.isEmpty()) {
+                Metadata m = found.get(0);
+                m.setFileSize(fileSize);
+                m.setModificationDate(LocalDateTime.now());
+                fileDBStorageService.update(m);
+                return m;
+            } else {
+                Metadata m = fileDBStorageService.store(LocalDateTime.now(), cleanPath, filename, "Production details", FilenameUtils.getExtension(filename), false);
+                m.setFileSize(fileSize);
+                fileDBStorageService.update(m);
+                return m;
+            }
+        } catch (Exception e) {
+            log.warn("Could not register details metadata in DB for {}: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
+    private void cleanDuplicateDetailsFiles(String mainFolderPath) {
+        try {
+            Path dir = fileDiskStorageService.getFile(mainFolderPath);
+            if (Files.isDirectory(dir)) {
+                try (Stream<Path> stream = Files.list(dir)) {
+                    stream.filter(p -> p.getFileName().toString().matches("(?i)^details\\(\\d+\\)\\.json$"))
+                            .forEach(dup -> {
+                                try {
+                                    Files.deleteIfExists(dup);
+                                    log.info("Deleted duplicate details file from disk: {}", dup);
+                                    String cleanPath = mainFolderPath.endsWith(File.separator) ? mainFolderPath : mainFolderPath + File.separator;
+                                    List<Metadata> meta = fileDBStorageService.loadByPathAndFilename(cleanPath, dup.getFileName().toString());
+                                    for (Metadata m : meta) {
+                                        if (!Boolean.TRUE.equals(m.isInTrash())) {
+                                            fileServiceManager.delete(m);
+                                        }
+                                        fileServiceManager.deletePermanently(m);
+                                    }
+                                } catch (Exception ex) {
+                                    log.warn("Failed to delete duplicate details file {}: {}", dup, ex.getMessage());
+                                }
+                            });
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not clean duplicate details files in {}: {}", mainFolderPath, e.getMessage());
+        }
     }
 
     private Map<String, Metadata> getSubtitlesMap(List<Metadata> subtitles) {
@@ -452,6 +550,36 @@ public class StreamingConfigLoader {
                 }
             } catch (Exception e) {
                 log.error("Error converting poster to base64", e);
+            }
+        } else {
+            // Check if poster.jpg or poster.png exists physically on disk
+            try {
+                Path diskJpg = fileDiskStorageService.getFile(mainFolderPath + "poster.jpg");
+                Path diskPng = fileDiskStorageService.getFile(mainFolderPath + "poster.png");
+                Path diskPoster = Files.exists(diskJpg) ? diskJpg : (Files.exists(diskPng) ? diskPng : null);
+                if (diskPoster != null) {
+                    byte[] file = Files.readAllBytes(diskPoster);
+                    if (file.length > 0) {
+                        String filename = diskPoster.getFileName().toString();
+                        String mime = filename.toLowerCase().endsWith(".jpg") ? "image/jpeg" : "image/png";
+                        productionData.setBase64PosterSrc("data:" + mime + ";base64," + Base64.getEncoder().encodeToString(file));
+
+                        String cleanPath = mainFolderPath.endsWith(File.separator) ? mainFolderPath : mainFolderPath + File.separator;
+                        List<Metadata> existing = fileDBStorageService.loadByPathAndFilename(cleanPath, filename);
+                        Metadata saved;
+                        if (existing.isEmpty()) {
+                            saved = fileDBStorageService.store(LocalDateTime.now(), cleanPath, filename, "Production poster", FilenameUtils.getExtension(filename), false);
+                            saved.setFileSize((long) file.length);
+                            fileDBStorageService.update(saved);
+                        } else {
+                            saved = existing.get(0);
+                        }
+                        mainFolderFiles.computeIfAbsent(ProductionFileType.POSTER, k -> new ArrayList<>()).add(saved);
+                        log.info("Loaded and registered poster from disk for: {}", mainFolderPath);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error reading poster from disk for: {}", mainFolderPath, e);
             }
         }
     }

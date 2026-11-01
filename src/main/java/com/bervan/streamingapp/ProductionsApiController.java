@@ -116,7 +116,7 @@ public class ProductionsApiController {
             byte[] bytes = Base64.getDecoder().decode(data);
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
-                    .header("Cache-Control", "max-age=3600")
+                    .header("Cache-Control", "no-cache, must-revalidate")
                     .body(bytes);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

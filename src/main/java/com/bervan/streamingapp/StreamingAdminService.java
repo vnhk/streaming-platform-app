@@ -2,6 +2,7 @@ package com.bervan.streamingapp;
 
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
+import com.bervan.filestorage.service.FileDiskStorageService;
 import com.bervan.filestorage.service.FileServiceManager;
 import com.bervan.logging.JsonLogger;
 import com.bervan.streamingapp.config.ProductionData;
@@ -12,6 +13,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,12 +28,16 @@ import java.util.zip.ZipInputStream;
 public class StreamingAdminService {
     private final JsonLogger log = JsonLogger.getLogger(getClass(), "streaming");
     private final FileServiceManager fileServiceManager;
+    private final FileDiskStorageService fileDiskStorageService;
     private final VideoManager videoManager;
     private final StreamingConfigLoader streamingConfigLoader;
 
-    public StreamingAdminService(FileServiceManager fileServiceManager, VideoManager videoManager,
-                                  StreamingConfigLoader streamingConfigLoader) {
+    public StreamingAdminService(FileServiceManager fileServiceManager,
+                                 FileDiskStorageService fileDiskStorageService,
+                                 VideoManager videoManager,
+                                 StreamingConfigLoader streamingConfigLoader) {
         this.fileServiceManager = fileServiceManager;
+        this.fileDiskStorageService = fileDiskStorageService;
         this.videoManager = videoManager;
         this.streamingConfigLoader = streamingConfigLoader;
     }
@@ -100,7 +107,7 @@ public class StreamingAdminService {
     public void addPoster(String productionName, InputStream posterStream, String posterFilename) throws Exception {
         String productionPath = videoManager.appFolder + File.separator + productionName + File.separator;
 
-        // Clean up any existing poster files (e.g. replacing poster.jpg with poster.png or vice versa)
+        // Clean up any existing poster files in DB
         try {
             Set<Metadata> existingFiles = fileServiceManager.loadByPath(productionPath);
             if (existingFiles != null) {
@@ -117,10 +124,21 @@ public class StreamingAdminService {
             log.warn("Could not check/delete old poster in {}: {}", productionPath, e.getMessage());
         }
 
+        // Clean up any existing poster files on disk to prevent FileDiskStorageService from creating poster(1).jpg
+        try {
+            Path diskPath = fileDiskStorageService.getFile(productionPath);
+            Files.deleteIfExists(diskPath.resolve("poster.jpg"));
+            Files.deleteIfExists(diskPath.resolve("poster.png"));
+            Files.deleteIfExists(diskPath.resolve("poster.jpeg"));
+        } catch (Exception e) {
+            log.warn("Could not delete old poster on disk in {}: {}", productionPath, e.getMessage());
+        }
+
         String filename = resolveImageFilename(posterFilename);
         String contentType = filename.endsWith(".jpg") ? "image/jpeg" : "image/png";
-        BervanMockMultiPartFile posterFile = new BervanMockMultiPartFile(filename, filename, contentType, posterStream);
-        fileServiceManager.save(posterFile, "", productionPath);
+        byte[] posterBytes = posterStream.readAllBytes();
+        BervanMockMultiPartFile posterFile = new BervanMockMultiPartFile(filename, filename, contentType, posterBytes);
+        fileServiceManager.save(posterFile, "", productionPath, true);
         log.info("Saved poster {} for production: {}", filename, productionName);
     }
 
