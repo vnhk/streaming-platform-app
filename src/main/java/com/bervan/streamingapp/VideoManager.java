@@ -16,9 +16,11 @@ import com.bervan.streamingapp.config.structure.mp4.MP4MovieRootProductionStruct
 import com.bervan.streamingapp.config.structure.mp4.MP4SeasonStructure;
 import com.bervan.streamingapp.config.structure.mp4.MP4TvSeriesRootProductionStructure;
 import jakarta.annotation.PostConstruct;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,6 +60,19 @@ public class VideoManager {
     @Value("${streaming-platform.file-storage-relative-path:/Streaming Platform}")
     public String appFolder;
 
+    public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
+        this.watchDetailsRepository = watchDetailsRepository;
+        this.searchService = searchService;
+        this.fileServiceManager = fileServiceManager;
+    }
+
+    private static void putIf(ProductionFileType key, Map<ProductionFileType, List<Metadata>> result, Metadata file) {
+        if (!result.containsKey(key)) {
+            result.put(key, new ArrayList<>());
+        }
+        result.get(key).add(file);
+    }
+
     @PostConstruct
     public void init() {
         try {
@@ -77,20 +92,6 @@ public class VideoManager {
         } catch (Exception e) {
             log.warn("Could not ensure streaming platform root directory: {}", e.getMessage());
         }
-    }
-
-
-    public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
-        this.watchDetailsRepository = watchDetailsRepository;
-        this.searchService = searchService;
-        this.fileServiceManager = fileServiceManager;
-    }
-
-    private static void putIf(ProductionFileType key, Map<ProductionFileType, List<Metadata>> result, Metadata file) {
-        if (!result.containsKey(key)) {
-            result.put(key, new ArrayList<>());
-        }
-        result.get(key).add(file);
     }
 
     public Set<String> availableSubtitles(Metadata videoFolder) {
@@ -137,22 +138,6 @@ public class VideoManager {
         return Optional.of(subtitlesFound.get(0));
     }
 
-    public Optional<String> detectSubtitleLanguage(String filename) {
-        String lower = filename.toLowerCase();
-        for (Map.Entry<String, List<String>> entry : subtitlesParts.entrySet()) {
-            for (String alias : entry.getValue()) {
-                for (String sep1 : subtitleSeparator) {
-                    for (String sep2 : subtitleSeparator) {
-                        if (lower.contains(sep1 + alias + sep2)) {
-                            return Optional.of(entry.getKey());
-                        }
-                    }
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
     public List<Metadata> loadVideosMainDirectories() {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.addCriterion("G1", Metadata.class, "path",
@@ -195,58 +180,21 @@ public class VideoManager {
         return response.getResultList();
     }
 
+    @Cacheable(value = "120minCache",
+            key = "'hlsDirectory:' + #videoFolderId",
+            sync = true)
+    public Path getBaseDir(String videoFolderId) {
+        List<Metadata> metadata = loadById(videoFolderId);
+        if (metadata.size() != 1) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        return Path.of(getSrc(metadata.get(0)))
+                .toAbsolutePath()
+                .normalize();
+    }
+
     public String getSrc(Metadata metadata) {
         return fileServiceManager.getFile(metadata).toString();
-    }
-
-    public Optional<Metadata> getNextVideo(Metadata videoMetadata) {
-        Optional<Metadata> videoParentFolder = fileServiceManager.getParent(videoMetadata);
-
-        if (videoParentFolder.isEmpty()) {
-            return Optional.empty();
-        }
-        videoMetadata = videoParentFolder.get();
-        String filename = videoMetadata.getFilename();
-
-        String pattern = "(?:Ep(?:isode)?\\s?|S\\d+E)(\\d+)";
-        Pattern regex = Pattern.compile(pattern);
-
-        int episodeNumber;
-        Matcher matcher = regex.matcher(filename);
-        if (matcher.find()) {
-            episodeNumber = Integer.parseInt(matcher.group(1)) + 1;
-        } else {
-            return Optional.empty();
-        }
-
-        return loadEpisodeVideo(videoMetadata, episodeNumber);
-    }
-
-    public Optional<Metadata> getPrevVideo(Metadata videoMetadata) {
-        Optional<Metadata> videoParentFolder = fileServiceManager.getParent(videoMetadata);
-
-        if (videoParentFolder.isEmpty()) {
-            return Optional.empty();
-        }
-        videoMetadata = videoParentFolder.get();
-        String filename = videoMetadata.getFilename();
-
-        String pattern = "(?:Ep(?:isode)?\\s?|S\\d+E)(\\d+)";
-        Pattern regex = Pattern.compile(pattern);
-
-        int episodeNumber;
-        Matcher matcher = regex.matcher(filename);
-        if (matcher.find()) {
-            episodeNumber = Integer.parseInt(matcher.group(1)) - 1;
-        } else {
-            return Optional.empty();
-        }
-
-        return loadEpisodeVideo(videoMetadata, episodeNumber);
-    }
-
-    public List<String> getSupportedExtensions() {
-        return new ArrayList<>(supportedExtensions);
     }
 
     public MetadataByPathAndType loadVideoDirectoryContent(Metadata directory) {
@@ -297,51 +245,6 @@ public class VideoManager {
         return metadataByPath;
     }
 
-    public Metadata getMainMovieFolder(Metadata video) {
-        Path path = Path.of(video.getPath());
-        while (path.getParent() != null) {
-            if (appFolder.endsWith(path.getParent().toString())) {
-                Path fileName = path.getFileName();
-                SearchRequest searchRequest = new SearchRequest();
-                searchRequest.addCriterion("G1", Metadata.class, "path",
-                        SearchOperation.EQUALS_OPERATION, path.getParent().toString() + File.separator);
-
-                SearchQueryOption options = new SearchQueryOption(Metadata.class);
-                options.setSortField("filename");
-
-                SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-
-                return response.getResultList()
-                        .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
-            }
-
-            path = path.getParent();
-        }
-
-        return null;
-    }
-
-    public Metadata getVideoFolder(Metadata video) {
-        Path path = Path.of(video.getPath());
-        if (path.getParent() != null) {
-            Path fileName = path.getFileName();
-            SearchRequest searchRequest = new SearchRequest();
-            searchRequest.addCriterion("G1", Metadata.class, "path",
-                    SearchOperation.EQUALS_OPERATION, path.getParent().toString() + File.separator);
-
-            SearchQueryOption options = new SearchQueryOption(Metadata.class);
-            options.setSortField("filename");
-
-            SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-
-            return response.getResultList()
-                    .stream().filter(e -> e.getFilename().equals(fileName.toString())).toList().get(0);
-
-        }
-
-        return null;
-    }
-
     public String convertSrtToVtt(Metadata subtitle) throws IOException {
         Path inputPath = Paths.get(getSrc(subtitle));
 
@@ -389,13 +292,6 @@ public class VideoManager {
         watchDetailsRepository.save(watchDetails);
     }
 
-    public void saveSubtitleDelays(WatchDetails watchDetails, double enDelay, double plDelay, double esDelay) {
-        watchDetails.setSubtitleDelayEN(enDelay);
-        watchDetails.setSubtitleDelayPL(plDelay);
-        watchDetails.setSubtitleDelayES(esDelay);
-        watchDetailsRepository.save(watchDetails);
-    }
-
     public Optional<Metadata> findSubtitle(Metadata videoFolder, String language) {
         try {
             String folderPath = videoFolder.getPath() + videoFolder.getFilename() + File.separator;
@@ -410,118 +306,6 @@ public class VideoManager {
             return Optional.empty();
         }
     }
-
-    public void applySubtitleDelayPermanently(Metadata subtitle, double delaySeconds) throws IOException {
-        Path filePath = Paths.get(getSrc(subtitle));
-        String filename = subtitle.getFilename();
-        Path originalBackup = filePath.getParent().resolve(filename + ".ORIGINAL");
-
-        if (!Files.exists(originalBackup)) {
-            Files.copy(filePath, originalBackup);
-            log.info("Created original backup: {}", originalBackup);
-        }
-
-        String content = readSubtitleContent(filePath);
-        String modified = filename.endsWith(".srt")
-                ? applyDelayToSrt(content, delaySeconds)
-                : applyDelayToVtt(content, delaySeconds);
-
-        Files.writeString(filePath, modified, StandardCharsets.UTF_8);
-        log.info("Applied permanent subtitle delay of {}s to {}", delaySeconds, filePath);
-    }
-
-    private String readSubtitleContent(Path path) throws IOException {
-        try {
-            return Files.readString(path);
-        } catch (Exception e) {
-            try {
-                return Files.readString(path, StandardCharsets.UTF_8);
-            } catch (Exception e1) {
-                return Files.readString(path, StandardCharsets.ISO_8859_1);
-            }
-        }
-    }
-
-    private String applyDelayToSrt(String content, double delaySeconds) {
-        long delayMs = Math.round(delaySeconds * 1000);
-        Pattern pattern = Pattern.compile("(\\d{2}:\\d{2}:\\d{2},\\d{3}) --> (\\d{2}:\\d{2}:\\d{2},\\d{3})");
-        Matcher matcher = pattern.matcher(content);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            String start = shiftTimestamp(matcher.group(1), delayMs, ',');
-            String end = shiftTimestamp(matcher.group(2), delayMs, ',');
-            matcher.appendReplacement(sb, Matcher.quoteReplacement(start + " --> " + end));
-        }
-        matcher.appendTail(sb);
-        return sb.toString();
-    }
-
-    private String applyDelayToVtt(String content, double delaySeconds) {
-        long delayMs = Math.round(delaySeconds * 1000);
-        Pattern pattern = Pattern.compile("(\\d{2}:\\d{2}:\\d{2}\\.\\d{3}) --> (\\d{2}:\\d{2}:\\d{2}\\.\\d{3})");
-        Matcher matcher = pattern.matcher(content);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            String start = shiftTimestamp(matcher.group(1), delayMs, '.');
-            String end = shiftTimestamp(matcher.group(2), delayMs, '.');
-            matcher.appendReplacement(sb, Matcher.quoteReplacement(start + " --> " + end));
-        }
-        matcher.appendTail(sb);
-        return sb.toString();
-    }
-
-    private String shiftTimestamp(String timestamp, long delayMs, char separator) {
-        int c1 = timestamp.indexOf(':');
-        int c2 = timestamp.indexOf(':', c1 + 1);
-        int sepIdx = timestamp.indexOf(separator);
-        long hours = Long.parseLong(timestamp.substring(0, c1));
-        long minutes = Long.parseLong(timestamp.substring(c1 + 1, c2));
-        long seconds = Long.parseLong(timestamp.substring(c2 + 1, sepIdx));
-        long ms = Long.parseLong(timestamp.substring(sepIdx + 1));
-        long total = hours * 3600000L + minutes * 60000L + seconds * 1000L + ms + delayMs;
-        if (total < 0) total = 0;
-        long h = total / 3600000; total %= 3600000;
-        long m = total / 60000;   total %= 60000;
-        long s = total / 1000;
-        long millis = total % 1000;
-        return String.format("%02d:%02d:%02d%c%03d", h, m, s, separator, millis);
-    }
-
-    @NotNull
-    private Optional<Metadata> loadEpisodeVideo(Metadata metadata, int episodeNumber) {
-        Optional<Metadata> parent = fileServiceManager.getParent(metadata);
-        if (parent.isPresent()) {
-            Metadata parentFolder = parent.get();
-            SearchRequest searchRequest = new SearchRequest();
-            searchRequest.addCriterion("G1", Metadata.class, "path",
-                    SearchOperation.EQUALS_OPERATION, parentFolder.getPath() + File.separator + parentFolder.getFilename());
-            searchRequest.addCriterion("G1", Metadata.class, "isDirectory",
-                    SearchOperation.EQUALS_OPERATION, true);
-
-            SearchQueryOption options = new SearchQueryOption(Metadata.class);
-            options.setSortField("filename");
-
-            SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-
-            String patternStr = "(?:(?:Ep(?:isode)?\\s?)|(?:S\\d+E0*))" + episodeNumber + "(?![0-9a-zA-Z])";
-            Pattern regex = Pattern.compile(patternStr);
-
-            Optional<Metadata> directory = response.getResultList().stream()
-                    .filter(m -> regex.matcher(m.getFilename()).find())
-                    .findFirst();
-
-            if (directory.isPresent()) {
-                Metadata dir = directory.get();
-                List<Metadata> video = loadVideoDirectoryContent(dir).get(dir.getPath() + dir.getFilename() + File.separator).get("VIDEO");
-                if (video != null && video.size() == 1) {
-                    return Optional.ofNullable(video.get(0));
-                }
-            }
-        }
-
-        return Optional.empty();
-    }
-
 
     public Optional<Metadata> findMp4PosterByFolderId(String folderId, Map<String, ProductionData> streamingProductionData) {
         Collection<ProductionData> productions = streamingProductionData.values();
@@ -545,54 +329,6 @@ public class VideoManager {
                 //if not present then main poster
                 if (productionStructure.getMetadataId().toString().equals(folderId)) {
                     return Optional.ofNullable(productionStructure.getPoster());
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-//    public Map<String, Metadata> findMp4SubtitlesByVideoId(String videoId, Map<String, ProductionData> streamingProductionData) {
-//        Collection<ProductionData> productions = streamingProductionData.values();
-//        for (ProductionData productionData : productions) {
-//            BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-//            if (productionStructure instanceof MP4MovieRootProductionStructure) {
-//                //for movies we get subtitles from the main folder
-//                for (Metadata video : ((MP4MovieRootProductionStructure) productionStructure).getVideosFolders()) {
-//                    if (videoId.equals(video.getId().toString())) {
-//                        return ((MP4MovieRootProductionStructure) productionStructure).getSubtitles();
-//                    }
-//                }
-//            } else if (productionStructure instanceof MP4TvSeriesRootProductionStructure) {
-//                //for tv series we go to the episode folder
-//                List<MP4SeasonStructure> seasons = ((MP4TvSeriesRootProductionStructure) productionStructure).getSeasons();
-//                for (MP4SeasonStructure season : seasons) {
-//                    for (MP4EpisodeStructure episode : season.getEpisodes()) {
-//                        Metadata video = episode.getVideo();
-//                        if (video != null && videoId.equals(video.getId().toString())) {
-//                            return episode.getSubtitles();
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//        return new HashMap<>();
-//    }
-
-    public Optional<Metadata> findVideoFolderById(String videoId, ProductionData productionData) {
-        BaseRootProductionStructure productionStructure = productionData.getProductionStructure();
-        if (productionStructure instanceof MovieBaseRootProductionStructure) {
-            List<Metadata> videoFolders = ((MovieBaseRootProductionStructure) productionStructure).getVideosFolders();
-            Optional<Metadata> videoOpt = videoFolders.stream().filter(video -> video.getId().toString().equals(videoId)).findFirst();
-            if (videoOpt.isPresent()) {
-                return videoOpt;
-            }
-        } else if (productionStructure instanceof TvSeriesBaseRootProductionStructure) {
-            List<? extends SeasonStructure> seasons = ((TvSeriesBaseRootProductionStructure) productionStructure).getSeasons();
-            for (SeasonStructure season : seasons) {
-                for (EpisodeStructure episode : season.getEpisodes()) {
-                    if (episode.getEpisodeFolder().getId().toString().equals(videoId)) {
-                        return Optional.of(episode.getEpisodeFolder());
-                    }
                 }
             }
         }
@@ -677,20 +413,6 @@ public class VideoManager {
             }
         }
         return Optional.empty();
-    }
-
-    /**
-     * Checks if there is a next episode available.
-     */
-    public boolean hasNextEpisode(String currentVideoFolderId, ProductionData productionData) {
-        return getNextVideoWithCrossSeasonSupport(currentVideoFolderId, productionData).isPresent();
-    }
-
-    /**
-     * Checks if there is a previous episode available.
-     */
-    public boolean hasPrevEpisode(String currentVideoFolderId, ProductionData productionData) {
-        return getPrevVideoWithCrossSeasonSupport(currentVideoFolderId, productionData).isPresent();
     }
 
     private List<EpisodeStructure> getSortedEpisodes(SeasonStructure season) {

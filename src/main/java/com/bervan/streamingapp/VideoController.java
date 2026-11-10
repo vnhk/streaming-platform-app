@@ -20,13 +20,11 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -66,152 +64,152 @@ public class VideoController {
         String outputFilename = videoFolderSingle.getFilename() + ".mp4";
 
         StreamingResponseBody stream = outputStream -> {
-                            Process process = null;
-                            Thread errorReaderThread = null;
-                            long startTime = System.currentTimeMillis();
+            Process process = null;
+            Thread errorReaderThread = null;
+            long startTime = System.currentTimeMillis();
 
-                            try {
-                                // Before running FFmpeg, check playlist content
-                                try {
-                                    String playlistContent = Files.readString(mainM3u8);
-                                    log.info("Using playlist content preview: " +
-                                            playlistContent.lines().limit(10).collect(Collectors.joining("\n")));
+            try {
+                // Before running FFmpeg, check playlist content
+                try {
+                    String playlistContent = Files.readString(mainM3u8);
+                    log.info("Using playlist content preview: " +
+                            playlistContent.lines().limit(10).collect(Collectors.joining("\n")));
 
-                                    int segmentCount = (int) playlistContent.lines()
-                                            .filter(line -> line.contains("#EXTINF"))
-                                            .count();
-                                    log.info("Playlist contains {} segments", segmentCount);
-                                } catch (Exception e) {
-                                    log.warn("Could not read playlist for debugging: " + e.getMessage());
-                                }
+                    int segmentCount = (int) playlistContent.lines()
+                            .filter(line -> line.contains("#EXTINF"))
+                            .count();
+                    log.info("Playlist contains {} segments", segmentCount);
+                } catch (Exception e) {
+                    log.warn("Could not read playlist for debugging: " + e.getMessage());
+                }
 
-                                // Collect subtitle inputs: language code -> file path
-                                // LinkedHashMap preserves insertion order for stream index tracking
-                                Map<String, String> subtitleLangToIso = new LinkedHashMap<>();
-                                subtitleLangToIso.put(VideoManager.EN, "eng");
-                                subtitleLangToIso.put(VideoManager.PL, "pol");
-                                subtitleLangToIso.put(VideoManager.ES, "spa");
+                // Collect subtitle inputs: language code -> file path
+                // LinkedHashMap preserves insertion order for stream index tracking
+                Map<String, String> subtitleLangToIso = new LinkedHashMap<>();
+                subtitleLangToIso.put(VideoManager.EN, "eng");
+                subtitleLangToIso.put(VideoManager.PL, "pol");
+                subtitleLangToIso.put(VideoManager.ES, "spa");
 
-                                Map<String, String> foundSubtitles = new LinkedHashMap<>();
-                                for (Map.Entry<String, String> entry : subtitleLangToIso.entrySet()) {
-                                    videoManager.findSubtitle(videoFolderSingle, entry.getKey())
-                                            .ifPresent(sub -> foundSubtitles.put(entry.getValue(), videoManager.getSrc(sub)));
-                                }
-                                log.info(context.map(), "Found subtitles for download: " + foundSubtitles.keySet());
+                Map<String, String> foundSubtitles = new LinkedHashMap<>();
+                for (Map.Entry<String, String> entry : subtitleLangToIso.entrySet()) {
+                    videoManager.findSubtitle(videoFolderSingle, entry.getKey())
+                            .ifPresent(sub -> foundSubtitles.put(entry.getValue(), videoManager.getSrc(sub)));
+                }
+                log.info(context.map(), "Found subtitles for download: " + foundSubtitles.keySet());
 
-                                List<String> command = new ArrayList<>();
-                                command.addAll(List.of("ffmpeg", "-y",
-                                        "-allowed_extensions", "ALL",
-                                        "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
-                                        "-i", mainM3u8.toString()));
+                List<String> command = new ArrayList<>();
+                command.addAll(List.of("ffmpeg", "-y",
+                        "-allowed_extensions", "ALL",
+                        "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+                        "-i", mainM3u8.toString()));
 
-                                // Add subtitle inputs
-                                for (String subtitlePath : foundSubtitles.values()) {
-                                    command.addAll(List.of("-i", subtitlePath));
-                                }
+                // Add subtitle inputs
+                for (String subtitlePath : foundSubtitles.values()) {
+                    command.addAll(List.of("-i", subtitlePath));
+                }
 
-                                // Stream mapping: all HLS streams + each subtitle input
-                                if (!foundSubtitles.isEmpty()) {
-                                    command.addAll(List.of("-map", "0"));
-                                    int inputIdx = 1;
-                                    for (String ignored : foundSubtitles.values()) {
-                                        command.addAll(List.of("-map", String.valueOf(inputIdx++)));
-                                    }
-                                }
+                // Stream mapping: all HLS streams + each subtitle input
+                if (!foundSubtitles.isEmpty()) {
+                    command.addAll(List.of("-map", "0"));
+                    int inputIdx = 1;
+                    for (String ignored : foundSubtitles.values()) {
+                        command.addAll(List.of("-map", String.valueOf(inputIdx++)));
+                    }
+                }
 
-                                command.addAll(List.of(
-                                        "-c:v", "copy",
-                                        "-c:a", "copy",
-                                        "-bsf:a", "aac_adtstoasc"));
+                command.addAll(List.of(
+                        "-c:v", "copy",
+                        "-c:a", "copy",
+                        "-bsf:a", "aac_adtstoasc"));
 
-                                if (!foundSubtitles.isEmpty()) {
-                                    command.addAll(List.of("-c:s", "mov_text"));
-                                    int subStreamIdx = 0;
-                                    for (String isoLang : foundSubtitles.keySet()) {
-                                        command.addAll(List.of(
-                                                "-metadata:s:s:" + subStreamIdx, "language=" + isoLang,
-                                                "-metadata:s:s:" + subStreamIdx, "title=" + isoLang));
-                                        subStreamIdx++;
-                                    }
-                                }
+                if (!foundSubtitles.isEmpty()) {
+                    command.addAll(List.of("-c:s", "mov_text"));
+                    int subStreamIdx = 0;
+                    for (String isoLang : foundSubtitles.keySet()) {
+                        command.addAll(List.of(
+                                "-metadata:s:s:" + subStreamIdx, "language=" + isoLang,
+                                "-metadata:s:s:" + subStreamIdx, "title=" + isoLang));
+                        subStreamIdx++;
+                    }
+                }
 
-                                // Write to a temp file so FFmpeg can apply +faststart
-                                // (moves moov atom to front of file = proper seeking, no artifacts, no audio desync)
-                                Path tempFile = Files.createTempFile("video-convert-", ".mp4");
+                // Write to a temp file so FFmpeg can apply +faststart
+                // (moves moov atom to front of file = proper seeking, no artifacts, no audio desync)
+                Path tempFile = Files.createTempFile("video-convert-", ".mp4");
 
-                                command.addAll(List.of(
-                                        "-movflags", "+faststart",
-                                        "-f", "mp4",
-                                        "-v", "info",
-                                        tempFile.toString()));
+                command.addAll(List.of(
+                        "-movflags", "+faststart",
+                        "-f", "mp4",
+                        "-v", "info",
+                        tempFile.toString()));
 
-                                ProcessBuilder processBuilder = new ProcessBuilder();
-                                processBuilder.command(command);
-                                processBuilder.directory(hlsBaseDir.toFile());
-                                processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.command(command);
+                processBuilder.directory(hlsBaseDir.toFile());
+                processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
 
-                                process = processBuilder.start();
-                                final Process finalProcess = process;
+                process = processBuilder.start();
+                final Process finalProcess = process;
 
-                                errorReaderThread = new Thread(() -> {
-                                    try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
-                                        String line;
-                                        while ((line = errorReader.readLine()) != null) {
-                                            if (line.contains("frame=") || line.contains("time=")) {
-                                                log.info("FFmpeg progress: " + line);
-                                            } else if (line.contains("Input") || line.contains("Output") || line.contains("Stream mapping")) {
-                                                log.info("FFmpeg info: " + line);
-                                            } else if (line.contains("Error") || line.contains("error") || line.contains("Failed")) {
-                                                log.error("FFmpeg error: " + line);
-                                            } else {
-                                                log.debug("FFmpeg: " + line);
-                                            }
-                                        }
-                                    } catch (IOException e) {
-                                        log.debug("Error reading FFmpeg stderr: " + e.getMessage());
-                                    }
-                                });
-                                errorReaderThread.setDaemon(true);
-                                errorReaderThread.start();
-
-                                try {
-                                    int exitCode = process.waitFor();
-                                    long conversionTime = (System.currentTimeMillis() - startTime) / 1000;
-                                    long fileSizeMb = Files.size(tempFile) / 1024 / 1024;
-                                    log.info("FFmpeg finished with exit code: {}. Output: {} MB in {} seconds",
-                                            exitCode, fileSizeMb, conversionTime);
-
-                                    if (exitCode != 0) {
-                                        log.error("FFmpeg failed with exit code {}", exitCode);
-                                        return;
-                                    }
-
-                                    // Stream the completed temp file to the client
-                                    byte[] buffer = new byte[65536];
-                                    int bytesRead;
-                                    long totalBytes = 0;
-                                    try (var fileStream = Files.newInputStream(tempFile)) {
-                                        while ((bytesRead = fileStream.read(buffer)) != -1) {
-                                            outputStream.write(buffer, 0, bytesRead);
-                                            totalBytes += bytesRead;
-                                        }
-                                        outputStream.flush();
-                                    } catch (IOException e) {
-                                        long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
-                                        log.info("Client disconnected after {} seconds. Sent: {} MB",
-                                                elapsedTime, totalBytes / 1024 / 1024);
-                                    }
-                                } finally {
-                                    Files.deleteIfExists(tempFile);
-                                }
-
-                            } catch (Exception e) {
-                                log.error("Conversion error: {}", e.getMessage());
-                                if (process != null && process.isAlive()) {
-                                    process.destroyForcibly();
-                                }
+                errorReaderThread = new Thread(() -> {
+                    try (var errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
+                        String line;
+                        while ((line = errorReader.readLine()) != null) {
+                            if (line.contains("frame=") || line.contains("time=")) {
+                                log.info("FFmpeg progress: " + line);
+                            } else if (line.contains("Input") || line.contains("Output") || line.contains("Stream mapping")) {
+                                log.info("FFmpeg info: " + line);
+                            } else if (line.contains("Error") || line.contains("error") || line.contains("Failed")) {
+                                log.error("FFmpeg error: " + line);
+                            } else {
+                                log.debug("FFmpeg: " + line);
                             }
-                        };
+                        }
+                    } catch (IOException e) {
+                        log.debug("Error reading FFmpeg stderr: " + e.getMessage());
+                    }
+                });
+                errorReaderThread.setDaemon(true);
+                errorReaderThread.start();
+
+                try {
+                    int exitCode = process.waitFor();
+                    long conversionTime = (System.currentTimeMillis() - startTime) / 1000;
+                    long fileSizeMb = Files.size(tempFile) / 1024 / 1024;
+                    log.info("FFmpeg finished with exit code: {}. Output: {} MB in {} seconds",
+                            exitCode, fileSizeMb, conversionTime);
+
+                    if (exitCode != 0) {
+                        log.error("FFmpeg failed with exit code {}", exitCode);
+                        return;
+                    }
+
+                    // Stream the completed temp file to the client
+                    byte[] buffer = new byte[65536];
+                    int bytesRead;
+                    long totalBytes = 0;
+                    try (var fileStream = Files.newInputStream(tempFile)) {
+                        while ((bytesRead = fileStream.read(buffer)) != -1) {
+                            outputStream.write(buffer, 0, bytesRead);
+                            totalBytes += bytesRead;
+                        }
+                        outputStream.flush();
+                    } catch (IOException e) {
+                        long elapsedTime = (System.currentTimeMillis() - startTime) / 1000;
+                        log.info("Client disconnected after {} seconds. Sent: {} MB",
+                                elapsedTime, totalBytes / 1024 / 1024);
+                    }
+                } finally {
+                    Files.deleteIfExists(tempFile);
+                }
+
+            } catch (Exception e) {
+                log.error("Conversion error: {}", e.getMessage());
+                if (process != null && process.isAlive()) {
+                    process.destroyForcibly();
+                }
+            }
+        };
 
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"" + outputFilename + "\"")
@@ -384,7 +382,7 @@ public class VideoController {
             return ResponseEntity.notFound().build();
         }
 
-        Path baseDir = Path.of(videoManager.getSrc(metadata.get(0)));
+        Path baseDir = videoManager.getBaseDir(videoFolderId);
 
         String fullPath = request.getRequestURI();
         String prefix = "/storage/videos/hls/" + videoFolderId + "/";
@@ -396,7 +394,7 @@ public class VideoController {
         String path = fullPath.substring(prefix.length());
 
         // Decode URL encoded characters (spaces, etc.)
-        path = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
+        path = URLDecoder.decode(path, StandardCharsets.UTF_8);
 
         Path file = baseDir.resolve(path).normalize();
 
