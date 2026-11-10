@@ -37,9 +37,6 @@ public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
             }
         }
 
-        log.info("WebSocket handshake - deviceType: " + attributes.get("deviceType") +
-                ", roomId: " + attributes.get("roomId"));
-
         return true;
     }
 

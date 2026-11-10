@@ -36,7 +36,6 @@ public class WsKeyHandshakeInterceptor implements HandshakeInterceptor {
             Optional<UUID> userIdOpt = wsKeyService.validateAndConsume(key, roomId);
             if (userIdOpt.isPresent()) {
                 attributes.put("userId", userIdOpt.get());
-                log.info("WsKeyHandshakeInterceptor: key validated, userId=" + userIdOpt.get() + " roomId=" + roomId);
                 return true;
             } else {
                 log.warn("WsKeyHandshakeInterceptor: validateAndConsume returned empty for key=" + key + " roomId=" + roomId);

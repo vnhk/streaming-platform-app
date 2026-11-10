@@ -40,7 +40,6 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
         String roomId = queryParams.getFirst("roomId");
 
         if (key != null) {
-            log.info("TokenHandshakeInterceptor: delegating to WsKeyHandshakeInterceptor for key=" + key + " roomId=" + roomId);
             return true;
         }
 
@@ -48,7 +47,6 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
         UUID userIdFromSession = null;
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
             userIdFromSession = ((User) auth.getPrincipal()).getId();
-            log.info("TokenHandshakeInterceptor: authenticated via session, userId=" + userIdFromSession);
         } else if (token == null) {
             log.warn("TokenHandshakeInterceptor: no session, no token, no key — rejecting");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
@@ -59,7 +57,6 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         } else {
             userIdFromSession = tokenService.resolveUserId(token).get();
-            log.info("TokenHandshakeInterceptor: resolved userId via token, userId=" + userIdFromSession + " token=" + token);
         }
 
         attributes.put("userId", userIdFromSession);
