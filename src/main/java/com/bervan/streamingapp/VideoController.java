@@ -376,12 +376,6 @@ public class VideoController {
     public ResponseEntity<Resource> serveHls(HttpServletRequest request,
                                              @PathVariable String videoFolderId) throws Exception {
 
-
-        List<Metadata> metadata = videoManager.loadById(videoFolderId);
-        if (metadata.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
         Path baseDir = videoManager.getBaseDir(videoFolderId);
 
         String fullPath = request.getRequestURI();
