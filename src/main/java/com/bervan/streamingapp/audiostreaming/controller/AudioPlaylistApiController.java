@@ -3,6 +3,9 @@ package com.bervan.streamingapp.audiostreaming.controller;
 import com.bervan.streamingapp.audiostreaming.model.AudioPlaylist;
 import com.bervan.streamingapp.audiostreaming.model.SavePlaylistRequest;
 import com.bervan.streamingapp.audiostreaming.service.AudioPlaylistService;
+import com.bervan.streamingapp.audiostreaming.service.AudioPlaylistExportService;
+import org.springframework.http.ContentDisposition;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,7 +21,10 @@ import java.util.List;
 public class AudioPlaylistApiController {
     private final AudioPlaylistService playlistService;
 
-    public AudioPlaylistApiController(AudioPlaylistService playlistService) {
+    private final AudioPlaylistExportService exportService;
+
+    public AudioPlaylistApiController(AudioPlaylistService playlistService, AudioPlaylistExportService exportService) {
+        this.exportService = exportService;
         this.playlistService = playlistService;
     }
 
@@ -44,6 +50,20 @@ public class AudioPlaylistApiController {
     public ResponseEntity<Void> deletePlaylist(@PathVariable String id) throws IOException {
         playlistService.deletePlaylist(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/download")
+    public ResponseEntity<StreamingResponseBody> downloadPlaylistZip(@PathVariable String id) throws IOException {
+        AudioPlaylist playlist = playlistService.getPlaylistById(id).orElse(null);
+        if (playlist == null) return ResponseEntity.notFound().build();
+
+        StreamingResponseBody stream = exportService.prepareZip(playlist);
+        String filename = sanitizeFilename(playlist.getName()).replaceAll("[\\p{Cntrl}]", "_") + ".zip";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .body(stream);
     }
 
     @GetMapping("/{id}/stream")
