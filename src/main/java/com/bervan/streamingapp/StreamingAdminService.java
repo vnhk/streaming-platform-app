@@ -46,7 +46,7 @@ public class StreamingAdminService {
                                   Double rating, Integer yearStart, Integer yearEnd, String country,
                                   String categories, String tags,
                                   byte[] posterBytes, String posterFilename) throws Exception {
-        String rootPath = videoManager.appFolder + File.separator;
+        String rootPath = videoManager.getAppFolder() + File.separator;
 
         fileServiceManager.createEmptyDirectory(rootPath, name);
         log.info("Created production folder: {}", name);
@@ -68,14 +68,14 @@ public class StreamingAdminService {
     }
 
     public void createSeason(String productionName, int seasonNumber) {
-        String productionPath = videoManager.appFolder + File.separator + productionName + File.separator;
+        String productionPath = videoManager.getAppFolder() + File.separator + productionName + File.separator;
         fileServiceManager.createEmptyDirectory(productionPath, "Season " + seasonNumber);
         log.info("Created Season {} for production: {}", seasonNumber, productionName);
     }
 
     public void addEpisodeMP4(String productionName, int seasonNumber, int episodeNumber,
                                InputStream videoStream, String videoFilename) throws Exception {
-        String seasonPath = videoManager.appFolder + File.separator + productionName + File.separator
+        String seasonPath = videoManager.getAppFolder() + File.separator + productionName + File.separator
                 + "Season " + seasonNumber + File.separator;
         String episodeFolderName = String.format("S%02dE%02d", seasonNumber, episodeNumber);
 
@@ -90,7 +90,7 @@ public class StreamingAdminService {
 
     public void addEpisodeHLS(String productionName, int seasonNumber,
                                InputStream zipStream, String zipFilename) throws Exception {
-        String seasonPath = videoManager.appFolder + File.separator + productionName + File.separator
+        String seasonPath = videoManager.getAppFolder() + File.separator + productionName + File.separator
                 + "Season " + seasonNumber + File.separator;
         BervanMockMultiPartFile zipFile = new BervanMockMultiPartFile(zipFilename, zipFilename, "application/zip", zipStream);
         fileServiceManager.saveAndExtractZip(zipFile, "", seasonPath);
@@ -98,14 +98,14 @@ public class StreamingAdminService {
     }
 
     public void addMovieVideoMP4(String productionName, InputStream videoStream, String videoFilename) throws Exception {
-        String productionPath = videoManager.appFolder + File.separator + productionName + File.separator;
+        String productionPath = videoManager.getAppFolder() + File.separator + productionName + File.separator;
         BervanMockMultiPartFile videoFile = new BervanMockMultiPartFile(videoFilename, videoFilename, "video/mp4", videoStream);
         fileServiceManager.save(videoFile, "", productionPath);
         log.info("Saved movie video {} for production: {}", videoFilename, productionName);
     }
 
     public void addPoster(String productionName, InputStream posterStream, String posterFilename) throws Exception {
-        String productionPath = videoManager.appFolder + File.separator + productionName + File.separator;
+        String productionPath = videoManager.getAppFolder() + File.separator + productionName + File.separator;
 
         // Clean up any existing poster files in DB
         try {
@@ -169,7 +169,7 @@ public class StreamingAdminService {
                 int season = Integer.parseInt(matcher.group(1));
                 int episode = Integer.parseInt(matcher.group(2));
                 String episodeFolderName = String.format("S%02dE%02d", season, episode);
-                String targetPath = videoManager.appFolder + File.separator + productionName
+                String targetPath = videoManager.getAppFolder() + File.separator + productionName
                         + File.separator + "Season " + season
                         + File.separator + episodeFolderName + File.separator;
 

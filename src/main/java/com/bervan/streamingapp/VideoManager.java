@@ -58,12 +58,16 @@ public class VideoManager {
     @Value("${file.service.storage.folder.main}")
     public String pathToFileStorage;
     @Value("${streaming-platform.file-storage-relative-path:/Streaming Platform}")
-    public String appFolder;
+    private String appFolder;
 
     public VideoManager(WatchDetailsRepository watchDetailsRepository, SearchService searchService, FileServiceManager fileServiceManager) {
         this.watchDetailsRepository = watchDetailsRepository;
         this.searchService = searchService;
         this.fileServiceManager = fileServiceManager;
+    }
+
+    public String getAppFolder() {
+        return appFolder;
     }
 
     private static void putIf(ProductionFileType key, Map<ProductionFileType, List<Metadata>> result, Metadata file) {
