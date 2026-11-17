@@ -230,3 +230,10 @@ Audio Library/
 - `GET /api/audio/download/tracks/{id}`, `albums/{id}`, `albums/{id}/playlist.m3u8`, `library`, `library/playlist.m3u8`
 - `POST /api/audio/admin/albums`, `POST /api/audio/admin/upload-track-auto`, `POST /api/audio/admin/upload-zip`, `POST /api/audio/admin/enrich`, `POST /api/audio/admin/reload`
 
+
+### HLS file metadata
+- `HlsFileStoragePolicy` implements the file-storage extension point. The root comes from `streaming-platform.file-storage-relative-path`, using the same default as `VideoManager`.
+- Only `.ts` and `.m4s` files below a subdirectory containing an `.m3u8` playlist are excluded from metadata, including nested segment directories. Detection is cached for one operation, not globally.
+- Directory metadata, all playlists, subtitles, MP4, MP3, posters, and other files remain tracked. Synchronizing an existing library removes only excluded database records and leaves disk files untouched.
+- The file browser displays the extension notice throughout the configured streaming root, including directories without HLS.
+- HLS streaming and download-and-convert resolve physical files from the retained folder metadata. FFmpeg reads the disk playlist and segments directly; it does not require segment records.
