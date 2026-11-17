@@ -1,6 +1,5 @@
 package com.bervan.streamingapp.config;
 
-import com.bervan.common.ImageScaleUtility;
 import com.bervan.common.service.OpenAIService;
 import com.bervan.filestorage.model.BervanMockMultiPartFile;
 import com.bervan.filestorage.model.Metadata;
@@ -25,8 +24,6 @@ import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -63,7 +60,7 @@ public class StreamingConfigLoader {
         );
     }
 
-    public Map<String, ProductionData> getStringProductionDataMap() {
+    public Map<String, ProductionData> loadProductionData() {
         Map<String, ProductionData> result = new HashMap<>();
         log.info("Loading all productions");
         long start = System.currentTimeMillis();

@@ -18,6 +18,6 @@ public class StreamingConfig {
 
     @Bean
     public Map<String, ProductionData> streamingProductionData() {
-        return streamingConfigLoader.getStringProductionDataMap();
+        return streamingConfigLoader.loadProductionData();
     }
 }

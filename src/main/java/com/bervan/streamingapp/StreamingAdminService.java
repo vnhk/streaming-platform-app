@@ -185,7 +185,7 @@ public class StreamingAdminService {
     }
 
     public void reloadConfig(Map<String, ProductionData> streamingProductionData) {
-        Map<String, ProductionData> newData = streamingConfigLoader.getStringProductionDataMap();
+        Map<String, ProductionData> newData = streamingConfigLoader.loadProductionData();
         streamingProductionData.clear();
         streamingProductionData.putAll(newData);
         log.info("Config reloaded, productions count: {}", streamingProductionData.size());
