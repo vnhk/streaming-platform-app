@@ -237,3 +237,5 @@ Audio Library/
 - Directory metadata, all playlists, subtitles, MP4, MP3, posters, and other files remain tracked. Synchronizing an existing library removes only excluded database records and leaves disk files untouched.
 - The file browser displays the extension notice throughout the configured streaming root, including directories without HLS.
 - HLS streaming and download-and-convert resolve physical files from the retained folder metadata. FFmpeg reads the disk playlist and segments directly; it does not require segment records.
+
+Production discovery in `VideoManager.loadVideosMainDirectories()` sets `pageSize` to `Integer.MAX_VALUE`, retaining filename ordering instead of limiting the library to the default first 50 folders.

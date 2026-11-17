@@ -151,8 +151,8 @@ public class VideoManager {
 
         SearchQueryOption options = new SearchQueryOption(Metadata.class);
         options.setSortField("filename");
-        SearchResponse<Metadata> response = searchService.search(searchRequest, options);
-        return response.getResultList();
+        options.setPageSize(Integer.MAX_VALUE);
+        return searchService.<Metadata>search(searchRequest, options).getResultList();
     }
 
     public Optional<Metadata> loadVideoMainDirectory(String folderName) {
