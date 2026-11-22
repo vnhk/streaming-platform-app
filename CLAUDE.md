@@ -239,3 +239,9 @@ Audio Library/
 - HLS streaming and download-and-convert resolve physical files from the retained folder metadata. FFmpeg reads the disk playlist and segments directly; it does not require segment records.
 
 Production discovery in `VideoManager.loadVideosMainDirectories()` sets `pageSize` to `Integer.MAX_VALUE`, retaining filename ordering instead of limiting the library to the default first 50 folders.
+
+### TV audio and playback diagnostics
+- Audio streaming returns `ResponseEntity<Resource>` with status 200; Spring MVC handles byte-range requests. Requests without Range receive the complete file instead of an unsolicited truncated 206.
+- TV mode uses native audio without the optional Web Audio mixer graph. Playback rejection is visible with a local Play action; remote commands cannot grant browser autoplay permission. Partial MediaSession support is tolerated.
+- Frontend HLS targets a rolling 120-second forward buffer, limits retained back buffer to 30 seconds, and checks low buffer every 10 seconds without restarting active downloads. Browser-native HLS buffering remains browser-controlled.
+- Global browser, API, and media diagnostics are reported through `/api/client-logs` to the existing backend log queue.

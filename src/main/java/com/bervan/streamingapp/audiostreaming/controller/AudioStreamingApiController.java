@@ -4,7 +4,6 @@ import com.bervan.streamingapp.audiostreaming.model.*;
 import com.bervan.streamingapp.audiostreaming.service.AudioStorageService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
@@ -77,10 +76,7 @@ public class AudioStreamingApiController {
     }
 
     @GetMapping("/tracks/{trackId}/stream")
-    public ResponseEntity<ResourceRegion> streamTrack(
-            @PathVariable String trackId,
-            @RequestHeader(value = "Range", required = false) String httpRangeList
-    ) throws IOException {
+    public ResponseEntity<Resource> streamTrack(@PathVariable String trackId) throws IOException {
         File file = storageService.getTrackFile(trackId);
         if (file == null || !file.exists()) {
             return ResponseEntity.notFound().build();
@@ -96,27 +92,12 @@ public class AudioStreamingApiController {
         else if (filename.endsWith(".m4a")) mediaType = MediaType.parseMediaType("audio/mp4");
         else if (filename.endsWith(".ogg")) mediaType = MediaType.parseMediaType("audio/ogg");
 
-        if (httpRangeList != null && !httpRangeList.isBlank()) {
-            List<HttpRange> ranges = HttpRange.parseRanges(httpRangeList);
-            if (!ranges.isEmpty()) {
-                HttpRange range = ranges.get(0);
-                long start = range.getRangeStart(contentLength);
-                long end = range.getRangeEnd(contentLength);
-                long rangeLength = Math.min(1024 * 1024L, end - start + 1); // 1MB chunks
-
-                ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
-                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                        .contentType(mediaType)
-                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .body(region);
-            }
-        }
-
-        long rangeLength = Math.min(1024 * 1024L, contentLength);
-        ResourceRegion region = new ResourceRegion(resource, 0, rangeLength);
-        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+        // Spring MVC handles Range requests for FileSystemResource, including 206 and 416.
+        // Clients without Range must receive the complete resource with 200, not a truncated 206.
+        return ResponseEntity.ok()
                 .contentType(mediaType)
+                .contentLength(contentLength)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .body(region);
+                .body(resource);
     }
 }
